@@ -1,0 +1,128 @@
+#!/usr/bin/env bash
+
+set -o nounset -o errexit -o pipefail
+
+#HELP:COMMAND_NAME: Add expressions to a GIT excludes/ignore file
+#HELP:Usage: COMMAND_NAME $path ...
+
+root_dir=$(dirname "$0")/..
+. "$root_dir"/share/wrtools-core/opt_help.bash
+. "$root_dir"/share/wrtools-core/fail.bash
+
+#HELP:Options:
+#HELP:  --help | -h: Print this help
+
+#HELP:  --scope=$scope | -s $scope: Set the level at which the exclusion will be
+#HELP:      applied. Scopes include:
+#HELP:          global: set at the user level (via property core.excludefile)
+#HELP:          root: set at current git repo's root .gitignore file
+#HELP:          local: set at current git repo's .git/info/excludes file
+#HELP:          dir: set at current folder's .gitignore file
+#HELP:     Scopes can be abbreviated to their first letter (e.g., -sl).
+#HELP:     If the current working directory is within a git repo, the default
+#HELP:     scope is "root", otherwise it's "global".
+unset scope
+opt_scope () {
+    (( $# == 1 )) || fail_assert "opt_scope needs 1 argument"
+    case $1 in
+        global | g ) scope=global;;
+        root | r ) scope=root;;
+        local | l ) scope=local;;
+        dir | d ) scope=dir;;
+        * ) fail "Unknown scope \"$1\". Must be global, root, local, or dir."
+    esac
+}
+    
+OPTIND=1
+while getopts :hs:-: option
+do case "$option" in
+       h ) opt_help;;
+       s ) opt_scope "$OPTARG";;
+       - ) case "$OPTARG" in
+               help ) opt_help;;
+               scope=* ) opt_scope "${OPTARG#*=}";;
+               scope ) fail "Argument required for long option \"$OPTARG\"";;
+               help=* ) fail "Long option \"${OPTARG%%=*}\" has unexpected argument";;
+               * ) fail "Unknown long option \"${OPTARG%%=*}\"";;
+            esac;;
+        '?' ) fail "Unknown short option \"$OPTARG\"";;
+        : ) fail "Short option \"$OPTARG\" missing argument";;
+        * ) fail_assert "Bad state in getopts (OPTARG=\"$OPTARG\")";;
+   esac
+done
+shift $((OPTIND-1))
+
+if git rev-parse 2>/dev/null
+then in_git_repo=true
+else in_git_repo=false
+fi
+
+if [[ $in_git_repo = true ]] && git rev-parse --is-inside-git-dir > /dev/null 2>/dev/null 
+then in_git_dir=true
+else in_git_dir=false
+fi
+
+if [[ is-set != ${scope+is-set} ]]
+then
+  if [[ $in_git_repo = true ]]
+  then scope=root
+  else scope=global
+  fi
+fi
+  
+unset excludesfile
+
+case $scope in
+    global )
+        if ! excludesfile=$(git config --path --get core.excludesfile 2>/dev/null)
+        then fail "Global scope requested, but property core.excludesfile is unset"
+        fi
+        ;;
+    root )
+        if [[ $in_git_repo = false ]]
+        then fail "Root scope requested, but context is not a git repository"
+        fi
+        excludesfile=$(git rev-parse --show-toplevel)/.gitignore
+        ;;
+    local )
+        if [[ $in_git_repo = false ]]
+        then fail "Local scope requested, but context is not a git repository"
+        fi
+        excludesfile=$(git rev-parse --absolute-git-dir)/info/exclude
+        ;;
+    dir )
+        if [[ $in_git_repo = false ]]
+        then fail "Dir scope requested, but context is not a git repository"
+        fi
+        if [[ $in_git_dir = true ]]
+        then fail "Dir scope requested, but context is in a .git folder"
+        fi
+        excludesfile=$PWD/.gitignore
+        ;;
+    * ) fail_assert "bad scope \"$scope\""
+esac
+
+git_root_dir=$(git rev-parse --show-toplevel)
+git_ignore_file_relative=$(realpath --relative-to=. -- "$excludesfile")
+
+for relative_path in "$@"
+do if [[ $scope = global ]]
+   then line=$(basename "$relative_path")
+   else line=/$(realpath --relative-to="$git_root_dir" -- "$relative_path")
+   fi
+   printf 'Add "%s" to %s?\n' "$line" "$excludesfile" >&2
+   PS3='? '
+   select option in yes no edit quit
+   do case "$option" in
+          yes ) printf '%s\n' "$line" >> "$excludesfile"
+                break;;
+          no ) printf 'Skipping %s\n' "$line" >&2
+               break;;
+          edit ) printf '%s\n' "$line" >> "$excludesfile"
+                 "$EDITOR" "$excludesfile"
+                 break;;
+          quit ) break 2;;
+          * ) echo "Type a number.";;
+      esac
+   done
+done

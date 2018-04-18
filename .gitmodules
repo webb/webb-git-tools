@@ -1,0 +1,3 @@
+[submodule "wrtools-core"]
+	path = wrtools-core
+	url = https://github.com/webb/wrtools-core.git
