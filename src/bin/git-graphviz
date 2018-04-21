@@ -1,0 +1,206 @@
+#!/usr/bin/env bash
+
+#HELP:COMMAND_NAME: Build and display a git repository graph using GraphViz
+#HELP:Usage: COMMAND_NAME [options]* -- rev-list ...
+#HELP:Options:
+#HELP:  --help | -h: print this help
+#HELP:  --verbose | -v: print debugging and status output
+#HELP:  --keep-temps | -k: Don't delete temporary files
+
+set -o nounset -o errexit
+
+root_dir=$(dirname "$0")/..
+. "$root_dir"/share/wrtools-core/opt_help.bash
+. "$root_dir"/share/wrtools-core/opt_verbose.bash
+. "$root_dir"/share/wrtools-core/fail.bash
+. "$root_dir"/share/wrtools-core/temp.bash
+
+#HELP:  --url-at-remote=$remote-name | -u $remote-name: point commits to URLs based on
+#HELP:                                                  a remote repo
+unset url_at_remote
+opt_url_at_remote () {
+    (( $# == 1 ))|| fail_assert "$FUNCNAME expects 1 arg, a remote name"
+    [[ -z ${url_at_remote+is-set} ]] || fail "$Option --url-at-remote can only be used once"
+    url_at_remote=$1
+}
+
+#HELP:  --all | -a: show all commits & refs in the repository
+unset all
+opt_all () {
+    (( $# == 0 ))|| fail_assert "$FUNCNAME expects 0 args (got $#)"
+    all=true
+}
+
+#HELP:  --open | -o: open the HTML result file
+unset open
+opt_open () {
+    (( $# == 0 ))|| fail_assert "$FUNCNAME expects 0 args (got $#)"
+    open=true
+}
+
+#HELP:  --date=$date-flag: set date format using git log --date option
+#HELP:      values: relative, local, default, iso, iso-strict, rfc, short, raw
+unset date
+opt_date () {
+    (( $# == 1 )) || fail_assert "$FUNCNAME expects 1 args (got $#)"
+    case $1 in
+        relative | local | default | iso | iso-strict | rfc | short | raw ) date=$1;;
+        * ) fail "Unknown value for --date ($1)";;
+    esac
+}
+
+OPTIND=1
+while getopts :ahkou:v-: OPTION
+do
+    case "$OPTION" in
+        a ) opt_all;;
+        h ) opt_help;;
+        k ) opt_keep_temps;;
+        o ) opt_open;;
+        u ) opt_url_at_remote "$OPTARG";;
+        v ) opt_verbose;;
+        - )
+            case "$OPTARG" in
+                all ) opt_all;;
+                help ) opt_help;;
+                keep-temps ) opt_keep_temps;;
+                open ) opt_open;;
+                verbose ) opt_verbose;;
+                all=* | help=* | keep-temps=* | verbose=* | open=* ) 
+                    fail "No argument expected for long option \"${OPTARG%%=*}\"";;
+
+                date=* ) opt_date "${OPTARG#*=}";;
+                url-at-remote=* ) opt_url_at_remote "${OPTARG#*=}";;
+                url-at-remote | date )
+                    fail "Missing required argument for long option \"$OPTARG\"";;
+                
+                * ) fail "Unexpected long option \"$OPTARG\"";;
+            esac;;
+        '?' ) fail "Unknown short option \"$OPTARG\"";;
+        : ) fail "Short option \"$OPTARG\" missing argument";;
+        * ) fail "bad state OPTARG=\"$OPTARG\"";;
+    esac
+done
+shift $((OPTIND-1))
+
+# $@ is git args
+
+if [[ -n ${all+is-set} ]]
+then set -- --full-history --all
+fi
+
+git_log=(git log)
+if [[ is-set = ${date+is-set} ]]
+then git_log+=( --date="$date" )
+fi
+
+temp_make_dir git_graphviz
+
+url_format="format:%H"
+if [[ -n ${url_at_remote+is-set} ]]
+then git remote show "$url_at_remote" > "$git_graphviz"/remote_show.txt || fail "Remote $url_at_remote not found"
+     sed -e 's/^  Fetch URL: \(.*\)$/\1/p;d' < "$git_graphviz"/remote_show.txt > "$git_graphviz"/remote_url.txt
+     remote_url=$(cat "$git_graphviz"/remote_url.txt)
+     if [[ $remote_url == https://github.com/* ]]
+     then printf -v url_format "%s/commit/%%H" "${remote_url%.git}"
+     else fail "I don't know how to render remote $remote_url"
+     fi
+fi
+
+{
+    cat <<EOF
+digraph git_graph {
+    edge [fontname = "Helvetica", fontsize = 10];
+    node [fontname = "Helvetica", fontsize = 10, width = 0, height = 0, shape=box, style=rounded];
+EOF
+
+    {
+        "${git_log[@]}" --pretty="format:%h %cN <%cE> %cd %s" "$@"
+        printf '\n'
+    } > "$git_graphviz"/commits.txt
+
+    while read -d$'\n' short summary
+    do summary1=${summary//\"/\\\"}
+       url=$("${git_log[@]}" --pretty="$url_format" -n 1 "$short")
+       printf '"%s" [id="id_%s", tooltip="%s", URL="%s"];\n' "$short" "$short" "$summary1" "$url"
+    done < "$git_graphviz"/commits.txt
+
+    put_parents() {
+        from=$1
+        shift
+        while (( $# > 0 ))
+        do # exclude commits not in the list
+            if egrep -q "^$1" "$git_graphviz"/commits.txt 
+            then printf '"%s" -> "%s";\n' "$from" "$1" 
+            fi
+            shift
+        done
+    }
+
+    while read -d$'\n' -a parents
+    do put_parents "${parents[@]}"
+    done < <("${git_log[@]}" --pretty='%h %p' "$@")
+
+    cat <<EOF
+    node [shape=plaintext];
+EOF
+
+    if [[ -n ${all+is-set} ]]
+    then
+      git for-each-ref --format="\"%(refname:short)\" -> \"%(objectname:short)\";" refs/heads refs/remotes
+      git for-each-ref --format="\"tag:%(refname:short)\" -> \"%(objectname:short)\";" refs/tags
+    else
+        git for-each-ref --format='%(objectname:short) %(refname:short)' refs/heads refs/remotes > "$git_graphviz"/refs.txt
+        for commit in $("${git_log[@]}" --format="format:%h" "$@")
+        do # print the tags
+           for tag in $(git tag -l --points-at $commit)
+           do printf "\"tag:%s\" -> \"%s\";\n" $tag $commit
+           done
+           # print heads & remotes
+           egrep "^$commit" "$git_graphviz"/refs.txt \
+             | sed -e 's/^\([^ ]*\) \(.*$\)/"\2" -> "\1";/'
+        done
+    fi
+    
+    cat <<EOF
+}
+EOF
+} > "$git_graphviz"/graph.dot
+
+dot -Tsvg -o"$git_graphviz"/graph.svg -Tcmapx -o"$git_graphviz"/graph.map "$git_graphviz"/graph.dot
+base64 --wrap=0 "$git_graphviz"/graph.svg > "$git_graphviz"/graph.svg.base64
+
+{
+    cat <<EOF
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd">
+<html xmlns="http://www.w3.org/1999/xhtml" xml:lang="en" lang="en">
+  <head>
+    <style type="text/css" media="all">
+html {
+  margin: 0;
+  padding: 0;
+}          
+    </style>
+    <title>Graphviz graph</title>
+  </head>
+  <body>
+    <img src="data:image/svg+xml;base64,$(cat "$git_graphviz"/graph.svg.base64)" usemap="#git_graph"/>
+EOF
+
+    cat "$git_graphviz"/graph.map
+
+    cat <<EOF
+  </body>
+</html>
+
+EOF
+} > "$git_graphviz"/graph.html
+
+if [[ -n ${open+is-set} ]]
+then
+  OPEN_BIN=$(type -p open) || fail "program \"open\" not found"
+  "$OPEN_BIN" "$git_graphviz"/graph.html
+  read -t 3 -p 'press RETURN to exit, or wait'
+else cat "$git_graphviz"/graph.html
+fi
