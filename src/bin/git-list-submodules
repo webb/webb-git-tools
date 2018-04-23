@@ -1,0 +1,74 @@
+#!/usr/bin/env bash
+
+set -o nounset -o errexit -o pipefail
+unset CDPATH
+
+#HELP:COMMAND_NAME: Get a list of submodules of a git repository, ordered by dependency
+#HELP:Show submodule order for current directory:
+#HELP:   COMMAND_NAME
+#HELP:Show submodule order for list of git repositories:
+#HELP:   COMMAND_NAME <folder within a git directory>...
+
+root_dir=$(dirname "$0")/..
+. "$root_dir"/share/wrtools-core/opt_help.bash
+. "$root_dir"/share/wrtools-core/opt_verbose.bash
+. "$root_dir"/share/wrtools-core/fail.bash
+
+command=$(get_command_path_abs)
+
+#HELP:Options:
+#HELP:  --help | -h: Print this help
+#HELP:  --verbose, -v: Print additional diagnostics
+
+#HELP : --from=$url | -f $url: output prefixed with Git remote URL
+unset from
+opt_from () {
+    (( $# == 1 )) || fail_assert "function $FUNCNAME requires 1 argument (got $#)"
+    [[ is-set != ${from+is-set} ]] || fail "Parameter --from can only be set once"
+    from="$1"
+}
+
+OPTIND=1
+while getopts :fhv-: option
+do case "$option" in
+       f ) opt_from "$OPTARG";;
+       h ) opt_help;;
+       v ) opt_verbose;;
+       - ) case "$OPTARG" in
+               from=* ) opt_from "${OPTARG#*=}";;
+               help ) opt_help;;
+               verbose ) opt_verbose;;
+               from ) fail "Argument required for long option \"$OPTARG\"";;
+               help=* \
+                 | verbose=* ) fail "Long option \"${OPTARG%%=*}\" has unexpected argument";;
+               * ) fail "Unknown long option \"${OPTARG%%=*}\"";;
+            esac;;
+        '?' ) fail "Unknown short option \"$OPTARG\"";;
+        : ) fail "Short option \"$OPTARG\" missing argument";;
+        * ) fail_assert "Bad state in getopts (OPTARG=\"$OPTARG\")";;
+   esac
+done
+shift $((OPTIND-1))
+
+if ! root=$(git rev-parse --show-toplevel)
+then fail "Current working directory is not in a git repository"
+fi
+
+get_list () {
+    current_branch=$(git rev-parse --abbrev-ref HEAD) || fail "git rev-parse failed"
+    if ! remote=$(git config --get "branch.$current_branch.remote")
+    then warn "In Git repository $PWD, current branch $current_branch has no remote; using git root directory $root"
+         url=$root
+    else url=$(git config --get "remote.$remote.url")
+    fi
+    if [[ is-set = ${from+is-set} ]]
+    then printf '%s %s\n' "$from" "$url"
+    else printf '%s %s\n' "$url $url"
+    fi
+    git submodule --quiet foreach "$command" --from="$url"
+}
+
+if [[ is-set = ${from+is-set} ]]
+then get_list
+else get_list | tsort | tac
+fi
