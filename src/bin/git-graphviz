@@ -141,7 +141,7 @@ then
   # tags, each tag object with name and what it references
   git for-each-ref --format="%(objecttype) %(objectname:short) name %(refname:short) references %(*objectname:short)" refs/tags > "$git_graphviz"/refs-tags.txt
   # tag $tag-object-hash name $tag-name references $commit-object-hash
-  egrep '^tag ' "$git_graphviz"/refs-tags.txt > "$git_graphviz"/tag-objects.txt
+  { egrep '^tag ' "$git_graphviz"/refs-tags.txt || true; } > "$git_graphviz"/tag-objects.txt
   # name $tag-name references $commit-object-hash
   sed '/^commit /s/^commit \([^ ]*\) name \([^ ]*\) references .*$/name \2 references \1/p;d' "$git_graphviz"/refs-tags.txt > "$git_graphviz"/lightweight-tags.txt
   # name $ref-name references $commit-object-hash
@@ -203,7 +203,7 @@ EOF
 
       sed -e 's/tag \([^ ]*\) name \([^ ]*\) references \(.*\)$/"\1" [label="tag:\2"];"\1" -> "\3";/' "$git_graphviz"/tag-to-commit.txt
 
-      sed -e 's/name \(.*\)$/"HEAD" [shape=plain];"HEAD" -> "\1";/' "$git_graphviz"/head-to-reference.txt
+      sed -e 's/name \(.*\)$/"HEAD" [shape=plaintext];"HEAD" -> "\1";/' "$git_graphviz"/head-to-reference.txt
 
     fi
     
