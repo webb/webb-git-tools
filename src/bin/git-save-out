@@ -1,0 +1,63 @@
+#!/usr/bin/env bash
+
+set -o nounset -o errexit -o pipefail
+
+#HELP:COMMAND_NAME: Save something out of a git repo with versioning info applied
+#HELP:Usage: COMMAND_NAME --destination=$dir $path...
+
+root_dir=$(dirname "$0")/..
+. "$root_dir"/share/wrtools-core/opt_help.bash
+. "$root_dir"/share/wrtools-core/opt_verbose.bash
+. "$root_dir"/share/wrtools-core/fail.bash
+
+#HELP:Options:
+#HELP:  --help | -h: Print this help
+
+#HELP:  --destination=$dir | -d $dir: copy files to directory (default .)
+destination=.
+opt_destination () {
+    (( $# == 1 )) || fail_assert "$FUNCNAME requires one arg, a directory"
+    [[ -d $1 ]] || fail "argument to --destination must be a directory"
+    # delete trailing slash
+    destination=${1%/}
+}
+
+OPTIND=1
+while getopts :d:hv-: option
+do case "$option" in
+       d ) opt_destination "$OPTARG";;
+       h ) opt_help;;
+       v ) opt_verbose;;
+       - ) case "$OPTARG" in
+               destination ) fail "Long option \"$OPTARG\" requires argument";;
+               destination=* ) opt_destination "${OPTARG#*=}";;
+               help ) opt_help;;
+               help=* ) fail "Long option \"${OPTARG%%=*}\" has unexpected argument";;
+               verbose ) opt_verbose;;
+               verbose=* ) fail "Long option \"${OPTARG%%=*}\" has unexpected argument";;
+               * ) fail "Unknown long option \"${OPTARG%%=*}\"";;
+            esac;;
+        '?' ) fail "Unknown short option \"$OPTARG\"";;
+        : ) fail "Short option \"$OPTARG\" missing argument";;
+        * ) fail_assert "Bad state in getopts (OPTARG=\"$OPTARG\")";;
+   esac
+done
+shift $((OPTIND-1))
+
+paths=()
+
+for path in "$@"
+do if [[ -r $path ]]
+   then paths+=( "$path" )
+   else fail "path \"$path\" is not a readable file"
+   fi
+done
+
+for path in "${paths[@]}"
+do dir=$(dirname "$path")
+   source=$(basename "$path")
+   describe=$(cd "$dir"; git describe --always) || fail "\"git describe\" failed for path "$path""
+   source_name=${source%%.*}
+   source_extension=${source#*.}
+   vrun cp "$path" "$destination/$source_name-$describe.$source_extension"
+done
