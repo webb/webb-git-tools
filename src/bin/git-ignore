@@ -57,8 +57,9 @@ then in_git_repo=true
 else in_git_repo=false
 fi
 
-if [[ $in_git_repo = true ]] && git rev-parse --is-inside-git-dir > /dev/null 2>/dev/null 
-then in_git_dir=true
+
+if [[ $in_git_repo = true ]]
+then in_git_dir=$(git rev-parse --is-inside-git-dir)
 else in_git_dir=false
 fi
 
@@ -106,10 +107,12 @@ git_root_dir=$(git rev-parse --show-toplevel)
 git_ignore_file_relative=$(realpath --relative-to=. -- "$excludesfile")
 
 for relative_path in "$@"
-do if [[ $scope = global ]]
-   then line=$(basename "$relative_path")
-   else line=/$(realpath --relative-to="$git_root_dir" -- "$relative_path")
-   fi
+do case $scope in
+       root | local ) line=/$(realpath --relative-to="$git_root_dir" -- "$relative_path") ;;
+       global ) line=$relative_path;;
+       dir ) line=/$(realpath --relative-to="$(dirname "${excludesfile}")" -- "$relative_path") ;;
+       * ) fail_assert "unexpected \$scope $scope";;
+   esac
    printf 'Add "%s" to %s?\n' "$line" "$excludesfile" >&2
    PS3='? '
    select option in yes no edit quit
