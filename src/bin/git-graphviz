@@ -125,54 +125,78 @@ omit_blank_lines () {
 "${git_log[@]}" --format="commit %h parents %p" "$@" > "$git_graphviz"/commits-with-parents.txt
 # commits with summary description
 "${git_log[@]}" --format="commit %h summary %cN <%cE> %cd %s" "$@" > "$git_graphviz"/commits-with-summaries.txt
+# all hashes in the graph, sorted
+cut -d ' ' -f 2 < "$git_graphviz"/commits-with-parents.txt | sort -b > "$git_graphviz"/hashes.txt
 
+# filter down the parent-child relationship to only where both parent & child
+# are in the list of commits.
+#
 # sorting by commit, parent1, and parent2
-sort -k 2b,2 "$git_graphviz"/commits-with-parents.txt > "$git_graphviz"/commits-with-parents.by-commit.txt
 sort -k 4b,4 "$git_graphviz"/commits-with-parents.txt > "$git_graphviz"/commits-with-parents.by-parent-1.txt
 sort -k 5b,5 "$git_graphviz"/commits-with-parents.txt > "$git_graphviz"/commits-with-parents.by-parent-2.txt
 # get parent 1 and 2 where the parent is also in the list of commits
-join -1 4 -2 2 -o 1.1,1.2,1.3,1.4 "$git_graphviz"/commits-with-parents.by-parent-1.txt "$git_graphviz"/commits-with-parents.by-commit.txt > "$git_graphviz"/parent-1-to-commit.txt
-join -1 5 -2 2 -o 1.1,1.2,1.3,1.5 "$git_graphviz"/commits-with-parents.by-parent-2.txt "$git_graphviz"/commits-with-parents.by-commit.txt > "$git_graphviz"/parent-2-to-commit.txt
+join -1 4 -2 1 -o 1.1,1.2,1.3,1.4 "$git_graphviz"/commits-with-parents.by-parent-1.txt "$git_graphviz"/hashes.txt > "$git_graphviz"/parent-1-to-commit.txt
+join -1 5 -2 1 -o 1.1,1.2,1.3,1.5 "$git_graphviz"/commits-with-parents.by-parent-2.txt "$git_graphviz"/hashes.txt > "$git_graphviz"/parent-2-to-commit.txt
 
+# decoration-style refs
 if [[ true = ${decorate-false} ]]
 then
-  # decoration-style refs
-  # "${git_log[@]}" --format="object %h refs %D" "$@" > "$git_graphviz"/refs.txt
-  # tags, each tag object with name and what it references
-  git for-each-ref --format="%(objecttype) %(objectname:short) name %(refname:short) references %(*objectname:short)" refs/tags > "$git_graphviz"/refs-tags.txt
-  # tag $tag-object-hash name $tag-name references $commit-object-hash
-  { egrep '^tag ' "$git_graphviz"/refs-tags.txt || true; } > "$git_graphviz"/tag-objects.txt
-  # name $tag-name references $commit-object-hash
-  sed '/^commit /s/^commit \([^ ]*\) name \([^ ]*\) references .*$/name \2 references \1/p;d' "$git_graphviz"/refs-tags.txt > "$git_graphviz"/lightweight-tags.txt
-  # name $ref-name references $commit-object-hash
-  git for-each-ref --format="name %(refname:short) references %(objectname:short)" refs/heads refs/remotes > "$git_graphviz"/references.txt
+  # # # # # # # # # # # # # # # # 
+  # all heavyweight tags
+  # FORMAT: tag $tag-object references $referenced-object
+  git for-each-ref --format="%(objecttype) %(objectname:short) references %(*objectname:short)" refs/tags | sed -e '/^tag /p;d' > "$git_graphviz"/tag-objects.txt
+  sort -k 4b,4 "$git_graphviz"/tag-objects.txt > "$git_graphviz"/tag-objects.by-referenced-object.txt
+  sort -u -k 2b,2 "$git_graphviz"/tag-objects.txt > "$git_graphviz"/tag-objects.by-tag-object.txt
+
+  # tags can point to tags, so we have to iteratively add tags until none more
+  # get added
+  while true
+  do join -1 4 -2 1 -o 1.2 "$git_graphviz"/tag-objects.by-referenced-object.txt \
+          "$git_graphviz"/hashes.txt > "$git_graphviz"/joined.txt
+     cat "$git_graphviz"/joined.txt "$git_graphviz"/hashes.txt \
+       | sort -b -u > "$git_graphviz"/updated-hashes.txt
+     if diff -q "$git_graphviz"/hashes.txt "$git_graphviz"/updated-hashes.txt > /dev/null
+     then break
+     else mv "$git_graphviz"/updated-hashes.txt "$git_graphviz"/hashes.txt
+     fi
+  done
+  mv "$git_graphviz"/updated-hashes.txt "$git_graphviz"/hashes.txt
+
+  # join tag-object to hashes
+  # FORMAT: tag $tag-object references $referenced-object
+  join -1 2 -2 1 -o 1.1,1.2,1.3,1.4 "$git_graphviz"/tag-objects.by-tag-object.txt "$git_graphviz"/hashes.txt > "$git_graphviz"/included-tag-objects.txt
+
+  # # # # # # # # # # # # # # # # 
+  # all lightweight tags
+  # FORMAT: name $tag-name references $referenced-object
+  git for-each-ref --format="name %(refname:short) references %(objectname:short)" refs/tags \
+    | sort -k 4b,4 > "$git_graphviz"/lightweight-tags.by-referenced-object.txt
+  # join referenced objects to hashes
+  # FORMAT: name $tag-name references $referenced-object
+  join -1 4 -2 1 -o 1.1,1.2,1.3,1.4 "$git_graphviz"/lightweight-tags.by-referenced-object.txt "$git_graphviz"/hashes.txt > "$git_graphviz"/included-lightweight-tags.txt
+
+  # # # # # # # # # # # # # # # # 
+  # all refs: all branches & remotes
+  # FORMAT: name $ref-name references $referenced-object
+  git for-each-ref --format="name %(refname:short) references %(objectname:short)" refs/heads refs/remotes | sort -k 4b,4 > "$git_graphviz"/refs.by-referenced-object.txt
+  # join refs.referenced-object to hashes
+  # FORMAT: name $ref-name references $referenced-object
+  join -1 4 -2 1 -o 1.1,1.2,1.3,1.4 "$git_graphviz"/refs.by-referenced-object.txt "$git_graphviz"/hashes.txt > "$git_graphviz"/included-refs.txt
+
+  # # # # # # # # # # # # # # # # 
+  # just the local HEAD
+  # FORMAT: $ref-name
   git rev-parse --abbrev-ref HEAD > "$git_graphviz"/head.txt
-
-  #############################################################################
-  # pick references (branches & remotes)
-  # sort references by referenced commit
-  sort -k 4b,4 "$git_graphviz"/references.txt > "$git_graphviz"/references.by-referenced-commit.txt
-  # join references to referenced commits
-  join -1 4 -2 2 -o 1.1,1.2,1.3,1.4 "$git_graphviz"/references.by-referenced-commit.txt "$git_graphviz"/commits-with-parents.by-commit.txt > "$git_graphviz"/reference-to-commit.txt
-
-  #############################################################################
-  # pick tags
-  sort -k 6b,6 "$git_graphviz"/tag-objects.txt > "$git_graphviz"/tag-objects.by-referenced-commit.txt
-  # join tags to referenced commits
-  join -1 6 -2 2 -o 1.1,1.2,1.3,1.4,1.5,1.6 "$git_graphviz"/tag-objects.by-referenced-commit.txt "$git_graphviz"/commits-with-parents.by-commit.txt > "$git_graphviz"/tag-to-commit.txt
-
-  #############################################################################
-  # pick lightweight tags
-  sort -k 4b,4 "$git_graphviz"/lightweight-tags.txt > "$git_graphviz"/lightweight-tags.by-referenced-commit.txt
-  # join tags to referenced commits
-  join -1 4 -2 2 -o 1.1,1.2,1.3,1.4 "$git_graphviz"/lightweight-tags.by-referenced-commit.txt "$git_graphviz"/commits-with-parents.by-commit.txt > "$git_graphviz"/lightweight-tag-to-commit.txt
-
-  #############################################################################
-  # pick HEAD
-  sort -k 2b,2 "$git_graphviz"/reference-to-commit.txt > "$git_graphviz"/reference-to-commit.by-name.txt
-  # join tags to referenced commits
-  join -1 1 -2 2 -o 2.1,2.2 "$git_graphviz"/head.txt "$git_graphviz"/reference-to-commit.by-name.txt > "$git_graphviz"/head-to-reference.txt
-
+  if [[ $(cat "$git_graphviz"/head.txt) == "HEAD" ]]
+  then # detached HEAD state. head is just a commit, not a branch.
+    git rev-parse --abbrev-ref HEAD > "$git_graphviz"/head.txt
+    join -1 1 -2 1 -o 1.1 "$git_graphviz"/head.txt "$git_graphviz"/hashes.txt > "$git_graphviz"/included-head.txt
+  else # HEAD points to a ref
+      # sort included refs by name
+      sort -k 2b,2 "$git_graphviz"/included-refs.txt > "$git_graphviz"/included-refs.by-name.txt
+      # FORMAT: $ref-name
+      join -1 1 -2 2 -o 1.1 "$git_graphviz"/head.txt "$git_graphviz"/included-refs.by-name.txt > "$git_graphviz"/included-head.txt
+  fi
 fi
 
 {
@@ -189,21 +213,20 @@ EOF
     if [[ true = ${decorate-false} ]]
     then
 
+
+      cat <<EOF
+node [shape=box, style=solid];
+EOF
+      
+      sed -e 's/tag \([^ ]*\) references \(.*\)$/"\1" [label="tag:\1"];"\1" -> "\2";/' "$git_graphviz"/included-tag-objects.txt
+      
       cat <<EOF
     node [shape=plaintext];
 EOF
 
-      sed -e 's/name \([^ ]*\) references \(.*\)$/"tag:\1" -> "\2";/' "$git_graphviz"/lightweight-tag-to-commit.txt
-      sed -e 's/name \([^ ]*\) references \(.*\)$/"\1" -> "\2";/' "$git_graphviz"/reference-to-commit.txt
-
-
-      cat <<EOF
-    node [shape=box, style=solid];
-EOF
-
-      sed -e 's/tag \([^ ]*\) name \([^ ]*\) references \(.*\)$/"\1" [label="tag:\2"];"\1" -> "\3";/' "$git_graphviz"/tag-to-commit.txt
-
-      sed -e 's/name \(.*\)$/"HEAD" [shape=plaintext];"HEAD" -> "\1";/' "$git_graphviz"/head-to-reference.txt
+      sed -e 's/name \([^ ]*\) references \(.*\)$/"tag:\1" -> "\2";/' "$git_graphviz"/included-lightweight-tags.txt
+      sed -e 's/name \([^ ]*\) references \(.*\)$/"\1" -> "\2";/' "$git_graphviz"/included-refs.txt
+      sed -e 's/^\(.*\)$/"HEAD" -> "\1";/' "$git_graphviz"/included-head.txt
 
     fi
     
