@@ -8,6 +8,7 @@
 #HELP:  --keep-temps | -k: Don't delete temporary files
 
 set -o nounset -o errexit
+export LC_ALL=C
 
 root_dir=$(dirname "$0")/..
 . "$root_dir"/share/wrtools-core/opt_help.bash
@@ -133,22 +134,29 @@ case ${remote_url-} in
 esac
    
 # commit objects with parent1 and parent2
-"${git_log[@]}" --format="commit %h parents %p" "$@" > "$git_graphviz"/commits-with-parents.txt
+# FORMAT: commit $commit i $parent-index parent $parent
+while read -r -a values
+do for ((parent = 1; parent < ${#values[@]}; ++parent))
+   do printf "commit %s i %d parent %s\n" "${values[0]}" "$parent" "${values[parent]}"
+   done
+done \
+  < <("${git_log[@]}" --format="%h %p" "$@") \
+  | sort -b > "$git_graphviz"/commits-parents.txt
+
 # commits with summary description
 # commit $commit-abbrev long $commit-long summary $summary
 "${git_log[@]}" --format="commit %h long %H summary %cN <%cE> %cd %s" "$@" | sed -e 's/"/\\\\"/g' > "$git_graphviz"/commits-with-summaries.txt
 # all hashes in the graph, sorted
-cut -d ' ' -f 2 < "$git_graphviz"/commits-with-parents.txt | sort -b > "$git_graphviz"/hashes.txt
+cut -d ' ' -f 2 < "$git_graphviz"/commits-with-summaries.txt | sort -b > "$git_graphviz"/hashes.txt
 
 # filter down the parent-child relationship to only where both parent & child
 # are in the list of commits.
 #
 # sorting by commit, parent1, and parent2
-sort -k 4b,4 "$git_graphviz"/commits-with-parents.txt > "$git_graphviz"/commits-with-parents.by-parent-1.txt
-sort -k 5b,5 "$git_graphviz"/commits-with-parents.txt > "$git_graphviz"/commits-with-parents.by-parent-2.txt
-# get parent 1 and 2 where the parent is also in the list of commits
-join -1 4 -2 1 -o 1.1,1.2,1.3,1.4 "$git_graphviz"/commits-with-parents.by-parent-1.txt "$git_graphviz"/hashes.txt > "$git_graphviz"/parent-1-to-commit.txt
-join -1 5 -2 1 -o 1.1,1.2,1.3,1.5 "$git_graphviz"/commits-with-parents.by-parent-2.txt "$git_graphviz"/hashes.txt > "$git_graphviz"/parent-2-to-commit.txt
+sort -k 6b,6 "$git_graphviz"/commits-parents.txt > "$git_graphviz"/commits-parents.by-parent.txt
+# get parent where the parent is also in the list of commits
+# FORMAT: commit $commit i $parent-index parent $parent
+join -1 6 -2 1 -o 1.1,1.2,1.3,1.4,1.5,1.6 "$git_graphviz"/commits-parents.by-parent.txt "$git_graphviz"/hashes.txt > "$git_graphviz"/included-commits-parents.txt
 
 # decoration-style refs
 if [[ true = ${decorate-false} ]]
@@ -223,9 +231,15 @@ EOF
     do render_node "$commit_abbrev" "$commit_long" "$summary"
     done < "$git_graphviz"/commits-with-summaries.txt
     
-    sed -e 's/commit \([^ ]*\) parents \(.*\)$/"\1" -> "\2";/' "$git_graphviz"/parent-1-to-commit.txt
-    sed -e 's/commit \([^ ]*\) parents \(.*\)$/"\1" -> "\2" [taillabel="2"];/' "$git_graphviz"/parent-2-to-commit.txt
-
+    # FORMAT: commit $commit i $parent-index parent $parent
+    while read Lcommit commit Li parent_index Lparent parent
+    do
+        case $parent_index in
+            1 ) printf "\"%s\" -> \"%s\";\n" "$commit" "$parent";;
+            * ) printf "\"%s\" -> \"%s\" [taillabel=\"%s\"];\n" "$commit" "$parent" "$parent_index";;
+        esac
+    done < "$git_graphviz"/included-commits-parents.txt
+    
     if [[ true = ${decorate-false} ]]
     then
 
