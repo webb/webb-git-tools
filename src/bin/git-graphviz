@@ -145,7 +145,7 @@ done \
 
 # commits with summary description
 # commit $commit-abbrev long $commit-long summary $summary
-"${git_log[@]}" --format="commit %h long %H summary %cN <%cE> %cd %s" "$@" | sed -e 's/"/\\\\"/g' > "$git_graphviz"/commits-with-summaries.txt
+"${git_log[@]}" --format="commit %h long %H summary %cN <%cE> %cd %s" "$@" | sed -e 's/"/\\"/g' > "$git_graphviz"/commits-with-summaries.txt
 # all hashes in the graph, sorted
 cut -d ' ' -f 2 < "$git_graphviz"/commits-with-summaries.txt | sort -b > "$git_graphviz"/hashes.txt
 
@@ -227,12 +227,12 @@ digraph git_graph {
 EOF
 
     # commit $commit-abbrev long $commit-long summary $summary...
-    while read L1 commit_abbrev L2 commit_long L3 summary
+    while read -r L1 commit_abbrev L2 commit_long L3 summary
     do render_node "$commit_abbrev" "$commit_long" "$summary"
     done < "$git_graphviz"/commits-with-summaries.txt
     
     # FORMAT: commit $commit i $parent-index parent $parent
-    while read Lcommit commit Li parent_index Lparent parent
+    while read -r Lcommit commit Li parent_index Lparent parent
     do
         case $parent_index in
             1 ) printf "\"%s\" -> \"%s\";\n" "$commit" "$parent";;
