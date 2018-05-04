@@ -1,7 +1,7 @@
 # Process this file with autoconf to produce a configure script.
 
 AC_PREREQ([2.69])
-AC_INIT([WR Tools: Git],[0],[https://github.com/webb/wrtools-git/issues],[wrtools-git],[https://github.com/webb/wrtools-git/])AC_COPYRIGHT
+AC_INIT([WR Tools: Git],[0],[https://github.com/webb/wrtools-git/issues],[wrtools-git],[https://github.com/webb/wrtools-git/])
 
 if test "x$prefix" = "xNONE"
 then AC_MSG_ERROR([\$prefix is unset. Set with --prefix=\${install root directory}])

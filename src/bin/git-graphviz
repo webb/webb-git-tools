@@ -71,21 +71,25 @@ do
         - )
             case "$OPTARG" in
                 all ) opt_all;;
-                decorate ) opt_decorate;;
-                help ) opt_help;;
-                keep-temps ) opt_keep_temps;;
-                open ) opt_open;;
-                verbose ) opt_verbose;;
-                all=* | help=* | keep-temps=* | verbose=* | open=* ) 
-                    fail "No argument expected for long option \"${OPTARG%%=*}\"";;
-
+                all=* ) fail_arg_unexpected "$OPTARG";;
+                date ) fail_arg_missing "$OPTARG";;
                 date=* ) opt_date "${OPTARG#*=}";;
-                remote ) fail "Long option \"$OPTARG\" missing argument";;
+                decorate ) opt_decorate;;
+                decorate=* ) fail_arg_unexpected "$OPTARG";;
+                help ) opt_help;;
+                help=* ) fail_arg_unexpected "$OPTARG";;
+                keep-temps ) opt_keep_temps;;
+                keep-temps=* ) fail_arg_unexpected "$OPTARG";;
+                open ) opt_open;;
+                open=* ) fail_arg_unexpected "$OPTARG";;
+                remote ) fail_arg_missing "$OPTARG";;
                 remote=* ) opt_remote "${OPTARG#*=}";;
-                * ) fail "Unexpected long option \"$OPTARG\"";;
+                verbose ) opt_verbose;;
+                verbose=* ) fail_arg_unexpected "$OPTARG";;
+                * ) fail_option_unknown "$OPTARG";;
             esac;;
-        '?' ) fail "Unknown short option \"$OPTARG\"";;
-        : ) fail "Short option \"$OPTARG\" missing argument";;
+        '?' ) fail_option_unknown "$OPTARG";;
+        : ) fail_arg_missing "$OPTARG";;
         * ) fail "bad state OPTARG=\"$OPTARG\"";;
     esac
 done

@@ -1,5 +1,8 @@
 #!/usr/bin/env bash
 
+# TODO: add a "force" argument to do issue stuff when there's a dirty working directory.
+# TODO: fetch issue subject from github
+
 #HELP:COMMAND_NAME: Operations supporting working with github issues
 #HELP:Usage: COMMAND_NAME [options] $command $args...
 
@@ -11,163 +14,145 @@ root_dir=$(dirname "$0")/..
 . "$root_dir"/share/wrtools-core/fail.bash
 . "$root_dir"/share/wrtools-core/temp.bash
 
-memory_file=$HOME/.git-issue_memory
-
 #HELP:Options:
 #HELP:  --help | -h: Print this help
 #HELP:  --verbose, -v: Print additional diagnostics
 
 OPTIND=1
-while getopts :hvb:-: option
+while getopts :hv:-: option
 do case "$option" in
-       b ) opt_new_branch "$OPTARG";;
        h ) opt_help;;
        v ) opt_verbose;;
        - ) case "$OPTARG" in
                help ) opt_help;;
+               help=* ) fail_arg_unexpected "$OPTARG";;
                verbose ) opt_verbose;;
-               new-branch=* ) opt_new_branch "${var#*=}";;
-               help=* \
-                 | verbose=* ) fail "Long option \"${OPTARG%%=*}\" has unexpected argument";;
-               new-branch ) fail "Argument required for long option \"$OPTARG\"";;
-               * ) fail "Unknown long option \"${OPTARG%%=*}\"";;
+               verbose=* ) fail_arg_unexpected "$OPTARG";;
+               * ) fail_option_unknown "$OPTARG";;
             esac;;
-        '?' ) fail "Unknown short option \"$OPTARG\"";;
-        : ) fail "Short option \"$OPTARG\" missing argument";;
+        '?' ) fail_option_unknown "$OPTARG";;
+        : ) fail_arg_missing "$OPTARG";;
         * ) fail_assert "Bad state in getopts (OPTARG=\"$OPTARG\")";;
    esac
 done
 shift $((OPTIND-1))
 
+if ! git rev-parse > /dev/null 2>&1
+then fail "Not in a git repository"
+fi
+
 (( $# > 0 )) || fail "need a command"
 
+# git config keys:
+# wrtools.issue.$issue-branch.parent-branch
+# wrtools.issue.$issue-branch.issueuri
 
-load_memory () {
-    unset parent_branch issue_branch issue_uri
-    if [[ -r "$memory_file" ]]
-    then while read -r -d $'\n'
-         do
-             case $REPLY in
-                 parent_branch=* ) parent_branch=${REPLY#*=};;
-                 issue_branch=* ) issue_branch=${REPLY#*=};;
-                 issue_uri=* ) parse_uri "${REPLY#*=}";;
-                 * ) fail "unknown memory line \"$REPLY\"";;
-             esac
-             # printf "%s is \"%s\"\n" "${REPLY%%=*}" "${REPLY#*=}"
-         done < "$memory_file"
-    else warn "no memory file ($memory_file)"
-    fi
+# indicate if the working directory is clean
+is_status_clean () {
+    git status --porcelain=v2 | grep -q -v ''
 }
-
-issue_regex='^(https://github.com/[^/]*/[^/]*/issues/)([1-9][0-9]*)$'
-unset issue_uri issue_uri_base issue_number
-parse_uri () {
-    (( $# == 1 )) || fail_assert "must have 1 URI arg"
-    if [[ $1 =~ $issue_regex ]]
-    then issue_uri=${BASH_REMATCH[0]}
-         issue_uri_base=${BASH_REMATCH[1]}
-         issue_number=${BASH_REMATCH[2]}
-    else return 1
-    fi
-}
-
-save_memory () {
-    printf "parent_branch=%s\n" "${parent_branch-}"
-    printf "issue_branch=%s\n" "${issue_branch-}"
-    printf "issue_uri=%s\n" "${issue_uri-}"
-} > "$memory_file"
-
-temp_make_file status
-
-status_clean () {
-    git status --porcelain > "$status"
-    if [[ ! -s $status ]]
-    then return 0
-    else return 1
-    fi
-}
-
-load_memory
 
 #HELP:Commands:
 vecho "command is \"$1\""
 case "$1" in
     #HELP:  help: Print this help
     help ) opt_help;;
-    #HELP:  checkout $issue: Checkout a new branch for the given issue.
-    #HELP:    $issue can be either a github issue URI or issue number for latest repo
+    #HELP:  checkout $URL: Checkout a new branch for a github issue
     checkout )
-        (( $# == 2 )) || fail "command \"$1\" requires a github issue URI or issue number"
-        [[ "" = ${issue_branch-} ]] || fail "Can't run \"$1\" when you're on an issue branch"
-        [[ "" = ${parent_branch-} ]] || fail "Can't run \"$1\" when you have a parent branch"
-        if [[ $2 =~ $issue_regex ]]
-        then parse_uri "$2" || fail "bad issue format: \"$2\""
-        elif [[ $2 =~ ^([1-9][0-9]*)$ ]]
-        then parse_uri "${issue_uri_base}${2}" || fail "bad issue format \"${issue_uri_base}${2}\""
-        else fail "unknown issue syntax: \"$2\""
+        (( $# == 2 )) || fail "checkout requires a github issue URI"
+        is_status_clean || fail "working directory is not clean"
+        github_issue_regex='^https://github.com/[^/]*/[^/]*/issues/([1-9][0-9]*)$'
+        if [[ $2 =~ $github_issue_regex ]]
+        then
+          uri=${BASH_REMATCH[0]}
+          issue_number=${BASH_REMATCH[1]}
+        else fail "unknown issue format: \"$2\""
         fi
-        status_clean || fail "working directory is not clean"
         parent_branch=$(git symbolic-ref --short HEAD)
-        issue_branch=dev-issue-$issue_number
+        issue_branch="dev-issue-$issue_number"
         if git rev-parse --verify --quiet "$issue_branch" > /dev/null
-        then fail "issue branch \"$issue_branch\" already exists"
+        then fail "issue branch $issue_branch already exists"
         fi
         git checkout -b "$issue_branch"
-        git commit --allow-empty -m "Issue $issue_uri."
-        save_memory
+        git commit --allow-empty -m "Issue $uri."
+        git config "wrtools.issue.$issue_branch.parent-branch" "$parent_branch"
+        git config "wrtools.issue.$issue_branch.issue-uri" "$uri"
         exit 0
         ;;
     #HELP:  diff: Show diffs on issue branch
     diff )
-        [[ "" != ${issue_branch-} ]] || fail "Must be on an issue branch to run \"$1\"."
-        [[ "" != ${parent_branch-} ]] || fail "Must have a parent branch to run \"$1\"."
         shift
+        issue_branch=$(git symbolic-ref --short HEAD) || fail "Error identifying HEAD"
+        parent_branch=$(git config --get "wrtools.issue.$issue_branch.parent-branch") \
+          || fail "No parent branch set for current branch $issue_branch"
         vrun git diff "$parent_branch" "$issue_branch" -- "$@"
         exit 0
         ;;
     #HELP:  log: Display & copy to clipboard the log of this branch.
     log )
         (( $# == 1 )) || fail "command \"log\" takes no parameters"
-        status_clean || fail "working directory is not clean"
+        issue_branch=$(git symbolic-ref --short HEAD) || fail "Error identifying HEAD"
+        parent_branch=$(git config --get "wrtools.issue.$issue_branch.parent-branch") \
+          || fail "No parent branch set for current branch $issue_branch"
         git catlog "$parent_branch".."$issue_branch"
         exit 0
         ;;
     #HELP:  merge: Merge this issue branch back into the parent branch.
     merge )
         (( $# == 1 )) || fail "command \"$1\" takes no parameters"
-        status_clean || fail "working directory is not clean"
+        is_status_clean || fail "working directory is not clean"
+        issue_branch=$(git symbolic-ref --short HEAD) || fail "Error identifying HEAD"
+        parent_branch=$(git config --get "wrtools.issue.$issue_branch.parent-branch") \
+          || fail "No parent branch set for current branch $issue_branch"
+        issue_uri=$(git config --get "wrtools.issue.$issue_branch.issue-uri") \
+          || fail "No issue URI set for current branch $issue_branch"
         git checkout "$parent_branch"
-        git merge --no-ff -m "Merge topic branch for issue $issue_number into parent branch" "$issue_branch"
+        git merge --no-ff -m "Merge topic branch for issue $issue_uri into parent branch $parent_branch. Closes $issue_uri." "$issue_branch"
         git branch -d "$issue_branch"
-        parent_branch=
-        issue_branch=
-        save_memory
+        git config --unset "wrtools.issue.$issue_branch.parent-branch"
+        git config --unset "wrtools.issue.$issue_branch.issue-uri"
         exit 0
         ;;
     #HELP:  squash: Squash the commits of the issue branch down & fast forward merge
     squash )
         (( $# == 1 )) || fail "command \"log\" takes no parameters"
-        status_clean || fail "working directory is not clean"
-        [[ "" != ${issue_branch-} ]] || fail "Must be on an issue branch to run \"$1\"."
-        [[ "" != ${parent_branch-} ]] || fail "Must have a parent branch to run \"$1\"."
+        is_status_clean || fail "working directory is not clean"
+        issue_branch=$(git symbolic-ref --short HEAD) || fail "Error identifying HEAD"
+        parent_branch=$(git config --get "wrtools.issue.$issue_branch.parent-branch") \
+          || fail "No parent branch set for current branch $issue_branch"
+        issue_uri=$(git config --get "wrtools.issue.$issue_branch.issue-uri") \
+          || fail "No issue URI set for current branch $issue_branch"
+        git commit --allow-empty -m "Closes $issue_uri."
         git rebase -i --keep-empty "$parent_branch"
         git checkout "$parent_branch"
         git merge --ff-only "$issue_branch"
         git branch -d "$issue_branch"
-        parent_branch=
-        issue_branch=
-        save_memory
+        git config --unset "wrtools.issue.$issue_branch.parent-branch"
+        git config --unset "wrtools.issue.$issue_branch.issue-uri"
         exit 0
         ;;
     #HELP:  status: Display current state.
     status )
-        cat "$memory_file"
-        git status
+        git config --get-regex '^wrtools.issue.'
         exit 0
         ;;
     #HELP:  open: Open the GitHub issue in the browser.
-    open ) exec open "$issue_uri";;
+    open )
+        issue_branch=$(git symbolic-ref --short HEAD) || fail "Error identifying HEAD"
+        issue_uri=$(git config --get "wrtools.issue.$issue_branch.issue-uri") \
+          || fail "No issue URI set for current branch $issue_branch"
+        exec open "$issue_uri"
+        ;;
     #HELP:  clean: Forget the git issue memory.
-    clean ) rm -f "$memory_file";;
-    * ) fail "unknown command \"$1\"";;
+    clean )
+        git config -z --name-only --get-regexp '^wrtools.issue.' \
+            | xargs -0 -n 1 git config --unset
+        ;;
+    * )
+        fail "unknown command \"$1\""
+        ;;
 esac
+
+if ! git rev-parse > /dev/null 2>&1
+then fail "Not in a git repository"
+fi
