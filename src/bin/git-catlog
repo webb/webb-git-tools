@@ -1,0 +1,32 @@
+#!/usr/bin/env bash
+
+. "$HOME"/share/wrtools-core/opt_help.bash
+. "$HOME"/share/wrtools-core/fail.bash
+
+#HELP:COMMAND_NAME: Show & capture a bunch of commit logs, old to new
+#HELP:Usage: COMMAND_NAME $options -- $git-log-options
+#HELP:  e.g., COMMAND_NAME -- -n 2 : capture the last 2 commit messages
+#HELP:global-options:
+#HELP:  --help | -h: Print this help
+
+OPTIND=1
+while getopts :h-: option
+do
+    case "$option" in
+        h ) opt_help;;
+        - )
+            case "$OPTARG" in
+                help ) opt_help;;
+                help=* ) fail_arg_unexpected "$OPTARG";;
+                * ) fail_option_unknown "$OPTARG";;
+            esac
+            ;;  
+        '?' ) fail_option_unknown "$OPTARG";;
+        : ) fail_arg_missing "$OPTARG";;
+        * ) assert false;;
+    esac
+done
+shift $((OPTIND - 1))
+
+exec 3>&1
+git log --reverse --pretty=format:%B "$@" | tee /dev/fd/3 | pbcopy
