@@ -91,6 +91,11 @@ do
 done
 shift $((OPTIND-1))
 
+if ! git rev-parse > /dev/null 2>&1
+then fail "Not in a git repository"
+fi
+   
+
 # $@ is git log args
 
 if [[ true = ${all-false} ]]
