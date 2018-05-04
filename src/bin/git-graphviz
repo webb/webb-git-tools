@@ -209,7 +209,7 @@ then
   git rev-parse --abbrev-ref HEAD > "$git_graphviz"/head.txt
   if [[ $(cat "$git_graphviz"/head.txt) == "HEAD" ]]
   then # detached HEAD state. head is just a commit, not a branch.
-    git rev-parse --abbrev-ref HEAD > "$git_graphviz"/head.txt
+    git rev-parse --short HEAD > "$git_graphviz"/head.txt
     join -1 1 -2 1 -o 1.1 "$git_graphviz"/head.txt "$git_graphviz"/hashes.txt > "$git_graphviz"/included-head.txt
   else # HEAD points to a ref
       # sort included refs by name
