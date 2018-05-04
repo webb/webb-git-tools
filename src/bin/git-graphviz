@@ -164,7 +164,7 @@ then
   # # # # # # # # # # # # # # # # 
   # all heavyweight tags
   # FORMAT: tag $tag-object references $referenced-object
-  git for-each-ref --format="%(objecttype) %(objectname:short) references %(*objectname:short)" refs/tags | sed -e '/^tag /p;d' > "$git_graphviz"/tag-objects.txt
+  git for-each-ref --format="%(objecttype) %(objectname:short) references %(*objectname:short) summary %(taggername) %(taggeremail) %(taggerdate) %(contents:subject)" refs/tags | sed -e 's/"/\\"/g' -e '/^tag /p;d' > "$git_graphviz"/tag-objects.txt
   sort -k 4b,4 "$git_graphviz"/tag-objects.txt > "$git_graphviz"/tag-objects.by-referenced-object.txt
   sort -u -k 2b,2 "$git_graphviz"/tag-objects.txt > "$git_graphviz"/tag-objects.by-tag-object.txt
 
@@ -183,8 +183,8 @@ then
   mv "$git_graphviz"/updated-hashes.txt "$git_graphviz"/hashes.txt
 
   # join tag-object to hashes
-  # FORMAT: tag $tag-object references $referenced-object
-  join -1 2 -2 1 -o 1.1,1.2,1.3,1.4 "$git_graphviz"/tag-objects.by-tag-object.txt "$git_graphviz"/hashes.txt > "$git_graphviz"/included-tag-objects.txt
+  # FORMAT: tag $tag-object references $referenced-object summary $summary...
+  join -1 2 -2 1 "$git_graphviz"/tag-objects.by-tag-object.txt "$git_graphviz"/hashes.txt > "$git_graphviz"/included-tag-objects.txt
 
   # # # # # # # # # # # # # # # # 
   # all lightweight tags
@@ -248,7 +248,7 @@ EOF
 node [shape=box, style=solid];
 EOF
       
-      sed -e 's/tag \([^ ]*\) references \(.*\)$/"\1" [label="tag:\1"];"\1" -> "\2";/' "$git_graphviz"/included-tag-objects.txt
+      sed -e 's/\([^ ]*\) tag references \([^ ]*\) summary \(.*\)$/"\1" [label="tag:\1",tooltip="\3"];"\1" -> "\2";/p;d' "$git_graphviz"/included-tag-objects.txt
       
       cat <<EOF
     node [shape=plaintext];
