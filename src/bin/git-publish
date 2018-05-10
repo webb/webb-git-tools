@@ -1,0 +1,96 @@
+#!/usr/bin/env bash
+
+#HELP:COMMAND_NAME: Publish content of tags and branches to a directory
+#HELP:Usage: COMMAND_NAME [options]* $dir
+#HELP:Options:
+#HELP:  --help | -h: print this help
+#HELP:  --verbose | -v: print debugging and status output
+
+set -o nounset -o errexit
+export LC_ALL=C
+
+root_dir=$(dirname "$0")/..
+. "$root_dir"/share/wrtools-core/opt_help.bash
+. "$root_dir"/share/wrtools-core/opt_verbose.bash
+. "$root_dir"/share/wrtools-core/fail.bash
+
+unset filtered
+unset tags
+#HELP:  Default is to include tags and branches, unless you choose one of:
+#HELP:  --tags | -t: include tags
+opt_tags () {
+    (( $# == 0 )) || fail_assert "$FUNCNAME requires 0 arg (got $#)"
+    tags=true
+    filtered=true
+}
+
+unset branches
+#HELP:  --branches | -b: include branches
+opt_branches () {
+    (( $# == 0 )) || fail_assert "$FUNCNAME requires 0 arg (got $#)"
+    branches=true
+    filtered=true
+}
+
+OPTIND=1
+while getopts :bhtv-: OPTION
+do
+    case "$OPTION" in
+        b ) opt_branches;;
+        h ) opt_help;;
+        t ) opt_tags;;
+        v ) opt_verbose;;
+        - )
+            case "$OPTARG" in
+                branches ) opt_branches;;
+                branches=* ) fail_arg_unexpected "$OPTARG";;
+                help ) opt_help;;
+                help=* ) fail_arg_unexpected "$OPTARG";;
+                tags ) opt_tags;;
+                tags=* ) fail_arg_unexpected "$OPTARG";;
+                verbose ) opt_verbose;;
+                verbose=* ) fail_arg_unexpected "$OPTARG";;
+                * ) fail_option_unknown "$OPTARG";;
+            esac;;
+        '?' ) fail_option_unknown "$OPTARG";;
+        : ) fail_option_missing "$OPTARG";;
+        * ) fail "bad state OPTARG=\"$OPTARG\"";;
+    esac
+done
+shift $((OPTIND-1))
+
+(( $# == 1 )) || fail "Expected 1 argument: target directory. Got $#."
+
+target_dir=$1
+shift
+
+if [[ true = ${filtered-false} ]]
+then true
+else tags=true
+     branches=true
+fi
+
+if ! git rev-parse > /dev/null 2>&1
+then fail "Not in a git repository"
+fi
+   
+if [[ ! -d $target_dir ]]
+then mkdir -p "$target_dir"
+fi
+
+if [[ true = ${tags-false} ]]
+then for tag in $(git for-each-ref refs/tags --format='%(refname:short)')
+     do mkdir -p "$target_dir/$tag"
+        commit=$(git rev-list -n 1 $tag)
+        git archive --format=tar "$commit" | tar xf - -C "$target_dir/$tag"
+     done
+fi
+
+if [[ true = ${branches-files} ]]
+then for branch in $(git for-each-ref refs/heads --format='%(refname:short)')
+     do mkdir -p "$target_dir/$branch"
+        commit=$(git rev-list -n 1 $branch)
+        git archive --format=tar "$commit" | tar xf - -C "$target_dir/$branch"
+     done
+fi
+
