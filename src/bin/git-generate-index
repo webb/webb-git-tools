@@ -1,0 +1,120 @@
+#!/usr/bin/env bash
+
+#HELP:COMMAND_NAME: Generate index.md files for a git repo
+#HELP:Usage: COMMAND_NAME [options]*
+#HELP:Options:
+#HELP:  --help | -h: print this help
+#HELP:  --verbose | -v: print debugging and status output
+
+set -o nounset -o errexit -o pipefail
+export LC_ALL=C
+unset CDPATH
+
+root_dir=$(dirname "$0")/..
+. "$root_dir"/share/wrtools-core/opt_help.bash
+. "$root_dir"/share/wrtools-core/opt_verbose.bash
+. "$root_dir"/share/wrtools-core/fail.bash
+
+OPTIND=1
+while getopts :ahv-: OPTION
+do
+    case "$OPTION" in
+        h ) opt_help;;
+        v ) opt_verbose;;
+        - )
+            case "$OPTARG" in
+                absolute ) opt_absolute;;
+                absolute=* ) fail_arg_unexpected "$OPTARG";;
+                help ) opt_help;;
+                help=* ) fail_arg_unexpected "$OPTARG";;
+                verbose ) opt_verbose;;
+                verbose=* ) fail_arg_unexpected "$OPTARG";;
+                * ) fail_option_unknown "$OPTARG";;
+            esac;;
+        '?' ) fail_option_unknown "$OPTARG";;
+        : ) fail_option_missing "$OPTARG";;
+        * ) fail "bad state OPTARG=\"$OPTARG\"";;
+    esac
+done
+shift $((OPTIND-1))
+
+(( $# == 0 )) || fail "Expected 0 arguments. Got $#."
+
+if ! git rev-parse > /dev/null 2>&1
+then fail "Not in a git repository"
+fi
+
+if ! branch=$(git symbolic-ref --short HEAD)
+then fail "Error identifying current branch"
+fi
+
+if ! remote=$(git config --get "branch.$branch.remote")
+then fail "Failed to find remote for branch $branch"
+fi
+
+if ! remote_url=$(git config --get "remote.$remote.url")
+then fail "Failed to find URL for remote $remote"
+fi
+
+#                                             ,user    ,repo
+#                                             v        v
+github_remote_url_regexp='^https://github.com/([^/]*)/([^/]*)\.git$'
+if [[ $remote_url =~ $github_remote_url_regexp ]]
+then base_url=https://${BASH_REMATCH[1]}.github.io/${BASH_REMATCH[2]}
+else fail "Unknown remote URL format: $remote_url"
+fi
+
+cat <<EOF
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd">
+<html xmlns="http://www.w3.org/1999/xhtml" xml:lang="en" lang="en">
+  <head>
+    <style type="text/css" media="all">
+body {
+  font-family: Helvetica, Arial, sans-serif;
+  font-size: 12pt;
+}          
+p.title {
+  font-size: 18pt;
+}
+:any-link {
+  color: black;
+  text-decoration: none;
+}
+:any-link:hover {
+  background-color: LightYellow;
+}
+    </style>
+EOF
+
+if [[ is-set = ${base_url+is-set} ]]
+then printf "<title>Index of %s</title>\n" "$base_url"
+else printf "<title>Index</title>\n"
+fi
+
+cat <<EOF
+  </head>
+  <body>
+EOF
+
+if [[ is-set = ${base_url+is-set} ]]
+then printf "<p class=\"title\">Index of <a href=\"%s\">%s</a></p>\n" "$base_url" "$base_url"
+else printf "<p class=\"title\">Index</title>\n"
+fi
+
+cat <<EOF
+    <ul>
+EOF
+
+while read -r -d '' path
+do case $path in
+       index.html ) true ;;
+       * ) printf '      <li><a href="%s/%s">%s</a></li>\n' "$base_url" "$path" "$path";;
+   esac
+done < <(git ls-files -z)
+
+cat <<EOF
+    </ul>
+  </body>
+</html>
+EOF
