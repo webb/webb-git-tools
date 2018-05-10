@@ -12,6 +12,7 @@ root_dir=$(dirname "$0")/..
 
 #HELP:Options:
 #HELP:  --help | -h: Print this help
+#HELP:  --verbose, -v: Print additional diagnostics
 
 #HELP:  --destination=$dir | -d $dir: copy files to directory (default .)
 destination=.
@@ -29,16 +30,16 @@ do case "$option" in
        h ) opt_help;;
        v ) opt_verbose;;
        - ) case "$OPTARG" in
-               destination ) fail "Long option \"$OPTARG\" requires argument";;
+               destination ) fail_arg_missing "$OPTARG";;
                destination=* ) opt_destination "${OPTARG#*=}";;
                help ) opt_help;;
-               help=* ) fail "Long option \"${OPTARG%%=*}\" has unexpected argument";;
+               help=* ) fail_arg_unexpected "$OPTARG";;
                verbose ) opt_verbose;;
-               verbose=* ) fail "Long option \"${OPTARG%%=*}\" has unexpected argument";;
-               * ) fail "Unknown long option \"${OPTARG%%=*}\"";;
+               verbose=* ) fail_arg_unexpected "$OPTARG";;
+               * ) fail_option_unknown "$OPTARG";;
             esac;;
-        '?' ) fail "Unknown short option \"$OPTARG\"";;
-        : ) fail "Short option \"$OPTARG\" missing argument";;
+        '?' ) fail_option_unknown "$OPTARG";;
+        : ) fail_arg_missing "$OPTARG";;
         * ) fail_assert "Bad state in getopts (OPTARG=\"$OPTARG\")";;
    esac
 done
