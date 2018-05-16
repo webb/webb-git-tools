@@ -28,5 +28,8 @@ do
 done
 shift $((OPTIND - 1))
 
-exec 3>&1
-git log --reverse --pretty=format:%B "$@" | tee /dev/fd/3 | pbcopy
+if type -p pbcopy > /dev/null
+then exec 3>&1
+     git log --reverse --pretty=format:%B "$@" | tee /dev/fd/3 | pbcopy
+else git log --reverse --pretty=format:%B "$@"
+fi
