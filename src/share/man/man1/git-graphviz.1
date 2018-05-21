@@ -1,46 +1,15 @@
-.Dd April 28, 2018
-.Dt git-graphviz 1
-.Os "OS X"
-.Sh NAME
-.Nm git-graphviz
-.Nd Build and display a git repository graph using GraphViz
-.Sh SYNOPSIS
-.Nm
-.Op Fl t Ar timeout
-.Op Fl p Ar pid | Fl n Ar name
-.Op Fl s
-.Sh DESCRIPTION
-The
-.Nm
-utility lists timers as they fire.
-.Pp
-The options are as follows:
-.Bl -tag -width "            "
-.It Fl t Ar timeout
-Run only for
-.Ar timeout
-seconds; then exit.
-.It Fl p Ar pid
-Analyze only timers from the process with process ID
-.Ar pid .
-.It Fl n Ar name
-Analyze only timers from processes with name
-.Ar name .
-It is an error to specify both
-.Fl p
-and 
-.Fl n .
-.It Fl s
-Show call stacks for "sleep"-type timers.
-.El
-.Sh SAMPLE USAGE
-.Pp
-.Nm
-.Fl n
-MyApp
-.Fl s
-.Fl t
-10
-.Pp
-.Nm
-will run for ten seconds, displaying timer data for all instances of processes named "MyApp", including stacks.
+.TH git-graphviz 1 2018-05-20 "WRTools: Git"
+.SH NAME
+git-graphviz \- Graphical vizualization of Git repositories via Graphviz
+.SH SYNOPSIS
+.B git-graphviz
+[
+.I options
+]
+.B --
+[
+.I rev-list
+]
+.SH DESCRIPTION
+\*(lqgit-graphviz\*(rq generates a graph of a Git repository, using the Graphviz
+graph generation application.
