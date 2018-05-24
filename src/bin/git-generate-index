@@ -5,6 +5,7 @@
 #HELP:Options:
 #HELP:  --help | -h: print this help
 #HELP:  --verbose | -v: print debugging and status output
+  #HELP:  --keep-temps | -k: Don't delete temporary files
 
 set -o nounset -o errexit -o pipefail
 export LC_ALL=C
@@ -14,57 +15,49 @@ root_dir=$(dirname "$0")/..
 . "$root_dir"/share/wrtools-core/opt_help.bash
 . "$root_dir"/share/wrtools-core/opt_verbose.bash
 . "$root_dir"/share/wrtools-core/fail.bash
+. "$root_dir"/share/wrtools-core/temp.bash
+
+#HELP:  -i: index: reference index.html in a subdirectory, rather than the directory itself
+unset index
+#HELP:  -r: recurse: list files in subdirectories, as well as local files
+unset recurse
+#HELP:  -s: subdirs: create index files in subdirectories, just locally
+unset subdirs
 
 OPTIND=1
-while getopts :ahv-: OPTION
+while getopts :hikrsv-: OPTION
 do
     case "$OPTION" in
         h ) opt_help;;
+        i ) index=true;;
+        k ) opt_keep_temps;;
+        r ) recurse=true;;
+        s ) subdirs=true;;
         v ) opt_verbose;;
         - )
             case "$OPTARG" in
-                absolute ) opt_absolute;;
-                absolute=* ) fail_arg_unexpected "$OPTARG";;
                 help ) opt_help;;
                 help=* ) fail_arg_unexpected "$OPTARG";;
+                keep-temps ) opt_keep_temps;;
+                keep-temps=* ) fail_arg_unexpected "$OPTARG";;
                 verbose ) opt_verbose;;
                 verbose=* ) fail_arg_unexpected "$OPTARG";;
                 * ) fail_option_unknown "$OPTARG";;
             esac;;
         '?' ) fail_option_unknown "$OPTARG";;
         : ) fail_option_missing "$OPTARG";;
-        * ) fail "bad state OPTARG=\"$OPTARG\"";;
+        * ) fail "bad state OPTION=$OPTION";;
     esac
 done
 shift $((OPTIND-1))
 
 (( $# == 0 )) || fail "Expected 0 arguments. Got $#."
 
-if ! git rev-parse > /dev/null 2>&1
-then fail "Not in a git repository"
-fi
+temp_make_file index_html
 
-if ! branch=$(git symbolic-ref --short HEAD)
-then fail "Error identifying current branch"
-fi
-
-if ! remote=$(git config --get "branch.$branch.remote")
-then fail "Failed to find remote for branch $branch"
-fi
-
-if ! remote_url=$(git config --get "remote.$remote.url")
-then fail "Failed to find URL for remote $remote"
-fi
-
-#                                             ,user    ,repo
-#                                             v        v
-github_remote_url_regexp='^https://github.com/([^/]*)/([^/]*)\.git$'
-if [[ $remote_url =~ $github_remote_url_regexp ]]
-then base_url=https://${BASH_REMATCH[1]}.github.io/${BASH_REMATCH[2]}
-else fail "Unknown remote URL format: $remote_url"
-fi
-
-cat <<EOF
+# works in the current directory
+get_index_text () {
+    cat <<EOF
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd">
 <html xmlns="http://www.w3.org/1999/xhtml" xml:lang="en" lang="en">
@@ -85,36 +78,53 @@ p.title {
   background-color: LightYellow;
 }
     </style>
-EOF
-
-if [[ is-set = ${base_url+is-set} ]]
-then printf "<title>Index of %s</title>\n" "$base_url"
-else printf "<title>Index</title>\n"
-fi
-
-cat <<EOF
+    <title>Index</title>
   </head>
   <body>
-EOF
-
-if [[ is-set = ${base_url+is-set} ]]
-then printf "<p class=\"title\">Index of <a href=\"%s\">%s</a></p>\n" "$base_url" "$base_url"
-else printf "<p class=\"title\">Index</title>\n"
-fi
-
-cat <<EOF
+    <p class="title">Index</title>
     <ul>
 EOF
 
-while read -r -d '' path
-do case $path in
-       index.html ) true ;;
-       * ) printf '      <li><a href="%s/%s">%s</a></li>\n' "$base_url" "$path" "$path";;
-   esac
-done < <(git ls-files -z)
+if [[ ${recurse-} = true ]]
+then find -s . -type f ! -path '*/.git/*' -print0
+else find -s . -maxdepth 1 ! -path '.' ! -path '*/.git' ! -path '*/.git/*' -print0
+fi \
+  | sed -z -e 's/^..//' \
+  | while read -r -d '' path
+do 
+    if [[ -d $path ]]
+    then if [[ ${index-} = true ]]
+         then printf '<li><a href="%s/index.html">%s</a></li>\n' "$path" "$path"
+         else printf '<li><a href="%s">%s</a></li>\n' "$path" "$path"
+         fi
+    else printf '<li><a href="%s">%s</a></li>\n' "$path" "$path"
+    fi
+done
 
 cat <<EOF
     </ul>
   </body>
 </html>
 EOF
+}
+
+# call as: generate_index $dir
+# call as: generate_index .
+# call as: generate_index ./foo/bar/baz
+generate_index () {
+    pushd "$1" > /dev/null || fail "Can't change current directory to $1"
+    if [[ -e index.html ]]
+    then printf 'Warning:index.html already exists in %s\n' "$1" >&2
+    else get_index_text > "$index_html"
+         # prevent the index from showing up in the index.
+         cat "$index_html" > index.html
+    fi
+    popd > /dev/null
+}
+
+while read -r -d ''
+do generate_index "$REPLY"
+done < <(if [[ ${subdirs-} = true ]]
+         then find -s . -type d ! -path '*/.git' ! -path '*/.git/*' -print0
+         else printf '.\0'
+         fi)
