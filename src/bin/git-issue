@@ -49,7 +49,11 @@ fi
 
 # indicate if the working directory is clean
 is_status_clean () {
-    git status --porcelain=v2 | grep -q -v ''
+    local status
+    if ! status=$(git status --porcelain=v2)
+    then fail "\"git status\" failed when checking for clean working directory"
+    fi
+    [[ -z $status ]]
 }
 
 #HELP:Commands:
