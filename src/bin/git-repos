@@ -1,0 +1,91 @@
+#!/usr/bin/env bash
+
+#HELP:COMMAND_NAME: Do operations on git repositories
+#HELP:Usage: COMMAND_NAME $options... $command ...
+
+set -o nounset -o errexit -o pipefail
+
+root_dir=$(dirname "$0")/..
+. "$root_dir"/share/wrtools-core/opt_help.bash
+. "$root_dir"/share/wrtools-core/opt_verbose.bash
+. "$root_dir"/share/wrtools-core/fail.bash
+
+#HELP:Options:
+#HELP:  --help | -h: Print this help
+
+#HELP:  --keep-going | -k: Look for repositories inside other repositories
+unset keep_going
+opt_keep_going () {
+    (( $# == 0 )) || fail_assert "$FUNCNAME needs 0 args (got $#)"
+    keep_going=true
+}
+
+OPTIND=1
+while getopts :hk-: option
+do case "$option" in
+       h ) opt_help;;
+       k ) opt_keep_going;;
+       - ) case "$OPTARG" in
+               help ) opt_help;;
+               keep-going ) opt_keep_going;;
+               help=* | keep-going=* )
+                   fail "Long option \"${OPTARG%%=*}\" has unexpected argument";;
+               * ) fail "Unknown long option \"${OPTARG%%=*}\"";;
+            esac;;
+        '?' ) fail "Unknown short option \"$OPTARG\"";;
+        : ) fail "Short option \"$OPTARG\" missing argument";;
+        * ) fail_assert "Bad state in getopts (OPTARG=\"$OPTARG\")";;
+   esac
+done
+shift $((OPTIND-1))
+
+if [[ -n ${keep_going+is-set} ]]
+then prune=""
+else prune="-prune"
+fi
+
+get_repos_0 () {
+    find -L . -type d -execdir test -d '{}'/.git \; -print0 $prune
+}
+
+case $# in
+    0 ) fail "need a command";;
+    * ) command="$1"
+        shift 1
+        case $command in
+            #HELP:Comands:
+            #HELP:  help: show this help
+            help ) opt_help;;
+            #HELP:  list: print repo directories
+            list ) while read -r -d '' repo
+                   do printf '%s\n' "$repo"
+                   done < <(get_repos_0);;
+            #HELP:  fetch: download content from all repos
+            fetch ) while read -r -d '' repo
+                  do printf "in directory %s:\n" "$repo" >&2
+                     git -C "$repo" fetch
+                  done < <(get_repos_0);;
+            #HELP:  fap: "git fetch --all --prune" from all repos
+            fap ) while read -r -d '' repo
+                  do printf "in directory %s:\n" "$repo" >&2
+                     git -C "$repo" fetch --all --prune
+                  done < <(get_repos_0);;
+            #HELP:  list-remotes: list all remotes for all repos
+            list-remotes )
+                while read -r -d '' repo
+                do while read -r -d$'\n' remote
+                   do url=$(git -C $repo remote get-url "$remote")
+                      printf "%s:%s:%s\n" "$repo" "$remote" "$url"
+                   done < <(git -C "$repo" remote)
+                done < <(get_repos_0)
+                ;;
+            #HELP:  do: execute some git command in the repo
+            do )
+                while read -r -d '' repo
+                do git -C "$repo" "$@"
+                done < <(get_repos_0)
+                ;;
+            * ) fail "unrecognized command \"$command\"";;
+        esac;;
+esac
+        
