@@ -57,7 +57,7 @@ done
 for path in "${paths[@]}"
 do dir=$(dirname "$path")
    source=$(basename "$path")
-   describe=$(cd "$dir"; git describe --always) || fail "\"git describe\" failed for path "$path""
+   describe=$(cd "$dir"; git describe --tags --always) || fail "\"git describe\" failed for path "$path""
    source_name=${source%%.*}
    source_extension=${source#*.}
    vrun cp "$path" "$destination/$source_name-$describe.$source_extension"
