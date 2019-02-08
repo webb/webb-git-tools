@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 
 #HELP:COMMAND_NAME: Publish content of tags and branches to a directory
-#HELP:Usage: COMMAND_NAME [options]* $dir
+#HELP:Usage: COMMAND_NAME [options]* $commit...
 #HELP:Options:
 #HELP:  --help | -h: print this help
 #HELP:  --verbose | -v: print debugging and status output
@@ -14,29 +14,37 @@ root_dir=$(dirname "$0")/..
 . "$root_dir"/share/wrtools-core/opt_verbose.bash
 . "$root_dir"/share/wrtools-core/fail.bash
 
-unset filtered
+unset target_dir
+#HELP:  --target-dir=$dir | -d $dir: publish files as subdirectories of $dir
+opt_target_dir () {
+    (( $# == 1 )) || fail_assert "$FUNCNAME requires 1 arg (got $#)"
+    [[ is-set != ${target_dir+is-set} ]] || fail "Option --target-dir may only be used once"
+    target_dir=$1
+}
+
 unset tags
-#HELP:  Default is to include tags and branches, unless you choose one of:
-#HELP:  --tags | -t: include tags
+#HELP:  --tags | -t: include all tags
 opt_tags () {
     (( $# == 0 )) || fail_assert "$FUNCNAME requires 0 arg (got $#)"
     tags=true
-    filtered=true
 }
 
 unset branches
-#HELP:  --branches | -b: include branches
+#HELP:  --branches | -b: include all branches
 opt_branches () {
     (( $# == 0 )) || fail_assert "$FUNCNAME requires 0 arg (got $#)"
     branches=true
-    filtered=true
 }
 
+#HELP:  Default is to include tags and branches, unless you choose one of --tags,
+#HELP:    --branches, or provide 1 or more commits.
+
 OPTIND=1
-while getopts :bhtv-: OPTION
+while getopts :bd:htv-: OPTION
 do
     case "$OPTION" in
         b ) opt_branches;;
+        d ) opt_target_dir "$OPTARG";;
         h ) opt_help;;
         t ) opt_tags;;
         v ) opt_verbose;;
@@ -48,6 +56,8 @@ do
                 help=* ) fail_arg_unexpected "$OPTARG";;
                 tags ) opt_tags;;
                 tags=* ) fail_arg_unexpected "$OPTARG";;
+                target-dir ) fail_arg_missing "$OPTARG";;
+                target-dir=* ) opt_target_dir "${OPTARG#*=}";;
                 verbose ) opt_verbose;;
                 verbose=* ) fail_arg_unexpected "$OPTARG";;
                 * ) fail_option_unknown "$OPTARG";;
@@ -59,38 +69,74 @@ do
 done
 shift $((OPTIND-1))
 
-(( $# == 1 )) || fail "Expected 1 argument: target directory. Got $#."
-
-target_dir=$1
-shift
-
-if [[ true = ${filtered-false} ]]
-then true
-else tags=true
-     branches=true
-fi
+[[ is-set = ${target_dir+is-set} ]] || fail_option_missing --target-dir
 
 if ! git rev-parse > /dev/null 2>&1
 then fail "Not in a git repository"
 fi
    
-if [[ ! -d $target_dir ]]
-then mkdir -p "$target_dir"
+#############################################################################
+# build commits list
+
+commits=()
+
+if (( $# == 0 )) && [[ true != ${tags-false} && true != ${branches-false} ]]
+then vecho "No commits provided. Using tags and branches"
+     tags=true
+     branches=true
 fi
+  
+# look for $1 in $commits[]
+commits_contains () {
+    local index
+    for index in ${!commits[@]}
+    do if [[ "$1" == "${commits[index]}" ]]
+       then return 0
+       fi
+    done
+    return 1
+}
+
+add_commit () {
+    if commits_contains "$1"
+    then warn Commit "$1" added multiple times.
+    else commits+=( "$1" )
+    fi
+}
 
 if [[ true = ${tags-false} ]]
 then for tag in $(git for-each-ref refs/tags --format='%(refname:short)')
-     do mkdir -p "$target_dir/$tag"
-        commit=$(git rev-list -n 1 $tag)
-        git archive --format=tar "$commit" | tar xf - -C "$target_dir/$tag"
+     do add_commit "$tag"
      done
 fi
 
 if [[ true = ${branches-files} ]]
 then for branch in $(git for-each-ref refs/heads --format='%(refname:short)')
-     do mkdir -p "$target_dir/$branch"
-        commit=$(git rev-list -n 1 $branch)
-        git archive --format=tar "$commit" | tar xf - -C "$target_dir/$branch"
+     do add_commit "$branch"
      done
 fi
+
+for commit in "$@"
+do add_commit "$commit"
+done
+
+#############################################################################
+# publish stuff
+
+# Check the commits. Try to fail before anything gets written.
+for commit in "${commits[@]}"
+do if [[ -e "$target_dir"/"$commit" ]]
+   then fail "Target path \"$target_dir/$commit\" already exists"
+   fi
+   if ! git rev-list -n 1 "$commit" > /dev/null
+   then fail "Commit name \"commit\" not found in repo"
+   fi
+done
+
+for commit in "${commits[@]}"
+do vecho "Publishing commit \"$commit\""
+    hash=$(git rev-list -n 1 $commit)
+    mkdir -p "$target_dir/$commit"
+    git archive --format=tar "$hash" | tar -x -C "$target_dir/$commit"
+done
 
