@@ -11,10 +11,13 @@ SHELL = @bash@ -o pipefail -o errexit -o nounset
 #############################################################################
 
 #HELP:Build for @PACKAGE_NAME@ (@PACKAGE_TARNAME@)
+#HELP:  Source dir = @srcdir@
+#HELP:  Prefix/install dir = @prefix@
 
+srcdir = @srcdir@
 abs_srcdir = @abs_srcdir@
-src_dir = ${abs_srcdir}/src
-build_dir = @abs_builddir@/build
+builddir = @builddir@
+abs_builddir = @abs_builddir@
 prefix = @prefix@
 PACKAGE_TARNAME = @PACKAGE_TARNAME@
 
@@ -33,15 +36,10 @@ stow = stow
 
 config_files = @config_files@
 
-src_files_default := ${shell ${find} ${src_dir} -type f ! -name '*~' ! -name '\#*\#' ! -name '\.\#*'}
+src_files_default := ${shell ${find} ${srcdir}/src -type f ! -name '*~' ! -name '\#*\#' ! -name '\.\#*'}
 src_files = ${src_files_default}
-all_files = ${src_files:${src_dir}/%=${build_dir}/%}
-install_files = ${src_files:${src_dir}/%=${prefix}/%}
-
-# ensure share directory name matches package name
-ifneq (,${filter-out ${src_dir}/share/${PACKAGE_TARNAME}/%,${filter ${src_dir}/share/%,${src_files}}})
-${error Source share directory name does not match package name}
-endif
+all_files = ${src_files:${srcdir}/src/%=${builddir}/build/%}
+install_files = ${src_files:${srcdir}/src/%=${prefix}/%}
 
 #############################################################################
 #HELP:Default target is "all". Targets include:
@@ -59,7 +57,8 @@ uninstall:
 
 .PHONY: clean #   Clean build products
 clean:
-	${RM} -r ${all_files}
+	${RM} ${all_files}
+	${RM} -r ${builddir}/build
 
 .PHONY: distclean #   Clean all products
 distclean: clean
@@ -68,18 +67,18 @@ distclean: clean
 #############################################################################
 # all
 
-${build_dir}/%: ${src_dir}/%
+${builddir}/build/%: ${srcdir}/src/%
 	${MKDIR_P} ${dir $@}
 	${INSTALL_DATA} -- $< $@
 
 #############################################################################
 # install
 
-${prefix}/bin/%: ${build_dir}/bin/%
+${prefix}/bin/%: ${builddir}/build/bin/%
 	@ ${MKDIR_P} -- ${dir $@}
 	${INSTALL_PROGRAM} -- $< $@
 
-${prefix}/%: ${build_dir}/%
+${prefix}/%: ${builddir}/build/%
 	@ ${MKDIR_P} -- ${dir $@}
 	${INSTALL_DATA} -- $< $@
 
@@ -91,16 +90,16 @@ dist_name = ${dist_name_default}
 
 .PHONY: zip #   Create a zip archive
 zip:
-	${RM} -r ${build_dir}/${dist_name}
-	git submodule foreach 'PATH="${build_dir}/${dist_name}:$$PATH" ${MAKE} -C ${abs_srcdir} zip-package zip_package_path=$$PWD build_dir=${build_dir} dist_name=${dist_name}'
-	PATH="${build_dir}/${dist_name}:$$PATH" ${MAKE}
-	PATH="${build_dir}/${dist_name}:$$PATH" ${MAKE} install prefix=${build_dir}/${dist_name}
-	${RM} -f ${build_dir}/${dist_name}.zip
-	( cd ${build_dir} && ${zip} -9 -r ${dist_name}.zip ${dist_name} )
+	${RM} -r ${builddir}/build/${dist_name}
+	git submodule foreach 'PATH="${abs_builddir}/build/${dist_name}:$$PATH" ${MAKE} -C ${abs_srcdir} zip-package zip_package_path=$$PWD abs_builddir=${abs_builddir} dist_name=${dist_name}'
+	PATH="${builddir}/build/${dist_name}:$$PATH" ${MAKE}
+	PATH="${builddir}/build/${dist_name}:$$PATH" ${MAKE} install prefix=${builddir}/build/${dist_name}
+	${RM} -f ${builddir}/build/${dist_name}.zip
+	( cd ${builddir}/build && ${zip} -9 -r ${dist_name}.zip ${dist_name} )
 
 .PHONY: zip-package
 zip-package:
-	cd ${zip_package_path} && ./configure --prefix=${build_dir}/${dist_name}
+	cd ${zip_package_path} && ./configure --prefix=${abs_builddir}/build/${dist_name}
 	${MAKE} -C ${zip_package_path}
 	${MAKE} -C ${zip_package_path} install
 
