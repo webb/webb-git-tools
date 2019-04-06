@@ -85,23 +85,26 @@ ${prefix}/%: ${builddir}/build/%
 #############################################################################
 # zip
 
-dist_name_default := ${PACKAGE_TARNAME}-${shell ${git} describe --always --tags}
+dist_name_default := ${PACKAGE_TARNAME}-${shell ${git} -C ${abs_srcdir} describe --always --tags}
 dist_name = ${dist_name_default}
 
 .PHONY: zip #   Create a zip archive
 zip:
 	${RM} -r ${builddir}/build/${dist_name}
-	git submodule foreach 'PATH="${abs_builddir}/build/${dist_name}:$$PATH" ${MAKE} -C ${abs_srcdir} zip-package zip_package_path=$$PWD abs_builddir=${abs_builddir} dist_name=${dist_name}'
+	git -C ${abs_srcdir} submodule foreach 'PATH="${abs_builddir}/build/${dist_name}/bin:$$PATH" ${MAKE} -C ${abs_builddir} zip-package dist_name=${dist_name} zip_package_source=$$PWD zip_package_build=${abs_builddir}/build/$$path zip_package_prefix=${abs_builddir}/build/${dist_name}'
 	PATH="${builddir}/build/${dist_name}:$$PATH" ${MAKE}
-	PATH="${builddir}/build/${dist_name}:$$PATH" ${MAKE} install prefix=${builddir}/build/${dist_name}
-	${RM} -f ${builddir}/build/${dist_name}.zip
+	PATH="${builddir}/build/${dist_name}:$$PATH" ${MAKE} install prefix=${abs_builddir}/build/${dist_name}
+	${RM} -f ${abs_builddir}/build/${dist_name}.zip
 	( cd ${builddir}/build && ${zip} -9 -r ${dist_name}.zip ${dist_name} )
+	@ printf 'Zip file is %s\n' ${builddir}/build/${dist_name}.zip
 
 .PHONY: zip-package
 zip-package:
-	cd ${zip_package_path} && ./configure --prefix=${abs_builddir}/build/${dist_name}
-	${MAKE} -C ${zip_package_path}
-	${MAKE} -C ${zip_package_path} install
+	${RM} -r ${zip_package_build}
+	${MKDIR_P} ${zip_package_build}
+	cd ${zip_package_build} && ${zip_package_source}/configure --prefix=${zip_package_prefix}
+	${MAKE} -C ${zip_package_build}
+	${MAKE} -C ${zip_package_build} install
 
 #############################################################################
 # stow
