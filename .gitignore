@@ -3,4 +3,5 @@
 /config.log
 /config.status
 /build
-
+/zip.mk
+/stow.mk

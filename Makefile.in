@@ -11,28 +11,25 @@ SHELL = @bash@ -o pipefail -o errexit -o nounset
 #############################################################################
 
 #HELP:Build for @PACKAGE_NAME@ (@PACKAGE_TARNAME@)
-#HELP:  Source dir = @srcdir@
-#HELP:  Prefix/install dir = @prefix@
 
 srcdir = @srcdir@
-abs_srcdir = @abs_srcdir@
 builddir = @builddir@
-abs_builddir = @abs_builddir@
 prefix = @prefix@
 PACKAGE_TARNAME = @PACKAGE_TARNAME@
 
 # PROGRAMS
 # autoconf names
 MKDIR_P = @MKDIR_P@
+install_data_mode :=             ${shell printf '%o' $$(( ( $$(umask) ^ 0777 ) & 0666 ))}
+install_data_readonly_mode :=    ${shell printf '%o' $$(( ( $$(umask) ^ 0777 ) & 0444 ))}
+install_program_readonly_mode := ${shell printf '%o' $$(( ( $$(umask) ^ 0777 ) & 0555 ))}
 INSTALL = @INSTALL@
-INSTALL_DATA = @INSTALL_DATA@
-INSTALL_PROGRAM = @INSTALL_PROGRAM@
+INSTALL_DATA = ${INSTALL} -m ${install_data_mode}
+INSTALL_DATA_READONLY = ${INSTALL} -m ${install_data_readonly_mode}
+INSTALL_PROGRAM_READONLY = ${INSTALL} -m ${install_program_readonly_mode}
 SED = @SED@
 # other names
 find = @find@
-git = git
-zip = zip
-stow = stow
 
 config_files = @config_files@
 
@@ -60,7 +57,7 @@ clean:
 	${RM} ${all_files}
 	${RM} -r ${builddir}/build
 
-.PHONY: distclean #   Clean all products
+.PHONY: distclean #   Clean build & configure products
 distclean: clean
 	${RM} ${config_files} config.log config.status
 
@@ -76,56 +73,11 @@ ${builddir}/build/%: ${srcdir}/src/%
 
 ${prefix}/bin/%: ${builddir}/build/bin/%
 	@ ${MKDIR_P} -- ${dir $@}
-	${INSTALL_PROGRAM} -- $< $@
+	${INSTALL_PROGRAM_READONLY} -- $< $@
 
 ${prefix}/%: ${builddir}/build/%
 	@ ${MKDIR_P} -- ${dir $@}
-	${INSTALL_DATA} -- $< $@
-
-#############################################################################
-# zip
-
-dist_name_default := ${PACKAGE_TARNAME}-${shell ${git} -C ${abs_srcdir} describe --always --tags}
-dist_name = ${dist_name_default}
-
-.PHONY: zip #   Create a zip archive
-zip:
-	${RM} -r ${builddir}/build/${dist_name}
-	git -C ${abs_srcdir} submodule foreach 'PATH="${abs_builddir}/build/${dist_name}/bin:$$PATH" ${MAKE} -C ${abs_builddir} zip-package dist_name=${dist_name} zip_package_source=$$PWD zip_package_build=${abs_builddir}/build/$$path zip_package_prefix=${abs_builddir}/build/${dist_name}'
-	PATH="${builddir}/build/${dist_name}:$$PATH" ${MAKE}
-	PATH="${builddir}/build/${dist_name}:$$PATH" ${MAKE} install prefix=${abs_builddir}/build/${dist_name}
-	${RM} -f ${abs_builddir}/build/${dist_name}.zip
-	( cd ${builddir}/build && ${zip} -9 -r ${dist_name}.zip ${dist_name} )
-	@ printf 'Zip file is %s\n' ${builddir}/build/${dist_name}.zip
-
-.PHONY: zip-package
-zip-package:
-	${RM} -r ${zip_package_build}
-	${MKDIR_P} ${zip_package_build}
-	cd ${zip_package_build} && ${zip_package_source}/configure --prefix=${zip_package_prefix}
-	${MAKE} -C ${zip_package_build}
-	${MAKE} -C ${zip_package_build} install
-
-#############################################################################
-# stow
-
-.PHONY: stow #   Install using GNU Stow (via default "@prefix@/stow/@PACKAGE_TARNAME@")
-stow:
-	${MAKE}
-	${MAKE} install prefix=${prefix}/stow/${PACKAGE_TARNAME}
-	${stow} -d ${prefix}/stow -t ${prefix} --stow --verbose --no-folding ${PACKAGE_TARNAME}
-
-.PHONY: unstow #   Uninstall a GNU Stow installation
-unstow:
-	${stow} -d ${prefix}/stow -t ${prefix} --delete --verbose --no-folding ${PACKAGE_TARNAME}
-	${MAKE} uninstall prefix=${prefix}/stow/${PACKAGE_TARNAME}
-	${RM} -r ${prefix}/stow/${PACKAGE_TARNAME}
-
-.PHONY: restow #   Unstow and then restow
-restow: 
-	${MAKE}
-	${MAKE} install prefix=${prefix}/stow/${PACKAGE_TARNAME}
-	${stow} -d ${prefix}/stow -t ${prefix} --restow --verbose --no-folding ${PACKAGE_TARNAME}
+	${INSTALL_DATA_READONLY} -- $< $@
 
 #############################################################################
 # make help: this must be the last target
