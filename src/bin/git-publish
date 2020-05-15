@@ -22,6 +22,14 @@ opt_target_dir () {
     target_dir=$1
 }
 
+source_dir=
+#HELP:  --source-dir=$dir | -s $dir: get files from subdirectory $dir of repo
+opt_source_dir () {
+    (( $# == 1 )) || fail_assert "$FUNCNAME requires 1 arg (got $#)"
+    [[ "" = $source_dir ]] || fail "Option --source-dir may only be used once"
+    source_dir=$1
+}
+
 unset tags
 #HELP:  --tags | -t: include all tags
 opt_tags () {
@@ -40,12 +48,13 @@ opt_branches () {
 #HELP:    --branches, or provide 1 or more commits.
 
 OPTIND=1
-while getopts :bd:htv-: OPTION
+while getopts :bd:hstv-: OPTION
 do
     case "$OPTION" in
         b ) opt_branches;;
         d ) opt_target_dir "$OPTARG";;
         h ) opt_help;;
+        s ) opt_source_dir "$OPTARG";;
         t ) opt_tags;;
         v ) opt_verbose;;
         - )
@@ -56,6 +65,8 @@ do
                 help=* ) fail_arg_unexpected "$OPTARG";;
                 tags ) opt_tags;;
                 tags=* ) fail_arg_unexpected "$OPTARG";;
+                source-dir ) fail_arg_missing "$OPTARG";;
+                source-dir=* ) opt_source_dir "${OPTARG#*=}";;
                 target-dir ) fail_arg_missing "$OPTARG";;
                 target-dir=* ) opt_target_dir "${OPTARG#*=}";;
                 verbose ) opt_verbose;;
@@ -137,6 +148,6 @@ for commit in "${commits[@]}"
 do vecho "Publishing commit \"$commit\""
     hash=$(git rev-list -n 1 $commit)
     mkdir -p "$target_dir/$commit"
-    git archive --format=tar "$hash" | tar -x -C "$target_dir/$commit"
+    git archive --format=tar "${hash}:${source_dir}" | tar -x -C "$target_dir/$commit"
 done
 
