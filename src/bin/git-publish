@@ -6,7 +6,7 @@
 #HELP:  --help | -h: print this help
 #HELP:  --verbose | -v: print debugging and status output
 
-set -o nounset -o errexit
+set -o nounset -o errexit -o pipefail
 export LC_ALL=C
 
 root_dir=$(dirname "$0")/..
@@ -22,12 +22,18 @@ opt_target_dir () {
     target_dir=$1
 }
 
-source_dir=
+unset source_dir
 #HELP:  --source-dir=$dir | -s $dir: get files from subdirectory $dir of repo
 opt_source_dir () {
     (( $# == 1 )) || fail_assert "$FUNCNAME requires 1 arg (got $#)"
-    [[ "" = $source_dir ]] || fail "Option --source-dir may only be used once"
     source_dir=$1
+}
+
+unset force
+#HELP:  --force | -f: overwrite commit if it exists in target dir (default is to fail)
+opt_force () {
+    (( $# == 0 )) || fail_assert "$FUNCNAME requires 0 args (got $#)"
+    force=true
 }
 
 unset tags
@@ -48,11 +54,12 @@ opt_branches () {
 #HELP:    --branches, or provide 1 or more commits.
 
 OPTIND=1
-while getopts :bd:hstv-: OPTION
+while getopts :bd:fhs:tv-: OPTION
 do
     case "$OPTION" in
         b ) opt_branches;;
         d ) opt_target_dir "$OPTARG";;
+        h ) opt_force;;
         h ) opt_help;;
         s ) opt_source_dir "$OPTARG";;
         t ) opt_tags;;
@@ -61,6 +68,8 @@ do
             case "$OPTARG" in
                 branches ) opt_branches;;
                 branches=* ) fail_arg_unexpected "$OPTARG";;
+                force ) opt_force;;
+                force=* ) fail_arg_unexpected "$OPTARG";;
                 help ) opt_help;;
                 help=* ) fail_arg_unexpected "$OPTARG";;
                 tags ) opt_tags;;
@@ -91,7 +100,7 @@ fi
 
 commits=()
 
-if (( $# == 0 )) && [[ true != ${tags-false} && true != ${branches-false} ]]
+if [[ $# = 0 && ! ${tags-} && ! ${branches-} ]]
 then vecho "No commits provided. Using tags and branches"
      tags=true
      branches=true
@@ -109,23 +118,29 @@ commits_contains () {
 }
 
 add_commit () {
+    (( $# == 1 )) || fail_assert "one commit expected (got $#)"
+    vecho Adding commit "$1"
     if commits_contains "$1"
-    then warn Commit "$1" added multiple times.
+    then warn "Commit \"$1\" added multiple times."
     else commits+=( "$1" )
     fi
 }
 
-if [[ true = ${tags-false} ]]
-then for tag in $(git for-each-ref refs/tags --format='%(refname:short)')
+if [[ ${tags-} ]]
+then vecho Adding all tags...
+     for tag in $(git for-each-ref refs/tags --format='%(refname:short)')
      do add_commit "$tag"
      done
 fi
 
-if [[ true = ${branches-files} ]]
-then for branch in $(git for-each-ref refs/heads --format='%(refname:short)')
+if [[ ${branches-} ]]
+then vecho Adding all branches...
+     for branch in $(git for-each-ref refs/heads --format='%(refname:short)')
      do add_commit "$branch"
      done
 fi
+
+vecho Adding command-line commits...
 
 for commit in "$@"
 do add_commit "$commit"
@@ -134,20 +149,35 @@ done
 #############################################################################
 # publish stuff
 
-# Check the commits. Try to fail before anything gets written.
-for commit in "${commits[@]}"
-do if [[ -e "$target_dir"/"$commit" ]]
-   then fail "Target path \"$target_dir/$commit\" already exists"
-   fi
-   if ! git rev-list -n 1 "$commit" > /dev/null
-   then fail "Commit name \"commit\" not found in repo"
-   fi
+# Check all the commits. Try to fail before anything gets written.
+vecho Checking all commits...
+for commit_key in ${!commits[@]}
+do
+    commit=${commits[commit_key]}
+    if [[ ! ${force-} && -e ${target_dir}/${commit} ]]
+    then fail_later "Target path \"${target_dir}/${commit}\" already exists"
+    fi
+    
+    if ! hash=$(git rev-list -n 1 "$commit")
+    then fail_later "Commit name \"commit\" not found in repo"
+    else if ! git archive -o /dev/null "$hash:${source_dir-}"
+         then fail_later "Failed to read commit \"$commit\" directory \"${source_dir-}\"\n" >&2
+         fi
+    fi
 done
 
-for commit in "${commits[@]}"
-do vecho "Publishing commit \"$commit\""
-    hash=$(git rev-list -n 1 $commit)
-    mkdir -p "$target_dir/$commit"
-    git archive --format=tar "${hash}:${source_dir}" | tar -x -C "$target_dir/$commit"
+maybe_fail_now
+
+vecho Writing data...
+
+for commit_key in ${!commits[@]}
+do commit=${commits[commit_key]}
+   vecho "Publishing commit \"$commit\""
+   hash=$(git rev-list -n 1 $commit)
+   if [[ ${force-} ]]
+   then rm -rf "${target_dir}/${commit}"
+   fi
+   mkdir -p "$target_dir/$commit"
+   vrun git archive --format=tar "${hash}:${source_dir-}" | vrun tar -x -C "$target_dir/$commit" $(is_verbose && printf '%s' -v)
 done
 
