@@ -1,0 +1,4 @@
+[submodule "wobble-bash-library"]
+	path = wobble-bash-library
+	url = ssh://wr@engineering/~/r/hosted/wobble-bash-library
+	branch = main
