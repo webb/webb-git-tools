@@ -1,0 +1,27 @@
+#!/usr/bin/env bash
+
+#HELP:WBL_COMMAND_NAME: Find files, ignoring .git directories.
+#USAGE:WBL_COMMAND_NAME ${dir} ${find predicates...}
+#HELP:Options:
+
+wbl_load help_option
+wbl_load verbose_option
+wbl_load dry_run_option
+wbl_load ensure_command_exists
+wbl_load run
+
+wbl_ensure_command_exists find git
+
+wbl_handle_options "$@"
+shift $((OPTIND-1))
+
+if (( $# == 0 ))
+then command=( find . ! -path ./.git ! -path './.git/*' )
+else if (( ${#1} == 1 ))
+     then dir=$1
+     else dir=${1%/}
+     fi
+     command=( find "$dir" ! -path "$dir/.git" ! -path "$dir/.git/*" ${2+"${@:2}"} )
+fi
+
+wbl_run --unless-dry-run --verbose "${command[@]}"

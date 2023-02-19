@@ -37,6 +37,7 @@ config_files = @config_files@
 # find src -type f | sort | sed -e 's/\(.*\)/  \${srcdir}\/\1 \\/'
 src_files = \
   ${srcdir}/src/bin/git-graphviz \
+  ${srcdir}/src/bin/git-find \
 
 all_files = ${src_files:${srcdir}/src/%=${builddir}/build/%}
 install_files = ${src_files:${srcdir}/src/%=${prefix}/%}
