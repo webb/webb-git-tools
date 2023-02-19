@@ -33,8 +33,11 @@ find = @find@
 
 config_files = @config_files@
 
-src_files_default := ${shell ${find} ${srcdir}/src -type f ! -name '*~' ! -name '\#*\#' ! -name '\.\#*'}
-src_files = ${src_files_default}
+# Insert files list with: CONTROL-U OPTION-!
+# find src -type f | sort | sed -e 's/\(.*\)/  \${srcdir}\/\1 \\/'
+src_files = \
+  ${srcdir}/src/bin/git-graphviz \
+
 all_files = ${src_files:${srcdir}/src/%=${builddir}/build/%}
 install_files = ${src_files:${srcdir}/src/%=${prefix}/%}
 
@@ -65,8 +68,8 @@ distclean: clean
 # all
 
 ${builddir}/build/%: ${srcdir}/src/%
-	${MKDIR_P} ${dir $@}
-	${INSTALL_DATA} -- $< $@
+	@ ${MKDIR_P} -- ${dir $@}
+	${srcdir}/wobble-bash-library/bin/embed-modules -o $@ $<
 
 #############################################################################
 # install

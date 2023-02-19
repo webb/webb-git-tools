@@ -1,102 +1,45 @@
 #!/usr/bin/env bash
 
-#HELP:COMMAND_NAME: Build and display a git repository graph using GraphViz
-#HELP:Usage: COMMAND_NAME [options]* -- rev-list ...
+#HELP:CORE_COMMAND_NAME: Build and display a git repository graph using GraphViz
+#HELP:Usage: CORE_COMMAND_NAME [options]* -- rev-list ...
 #HELP:Options:
-#HELP:  --help | -h: print this help
-#HELP:  --verbose | -v: print debugging and status output
-#HELP:  --keep-temps | -k: Don't delete temporary files
 
-set -o nounset -o errexit
 export LC_ALL=C
 
-root_dir=$(dirname "$0")/..
-. "$root_dir"/share/wrtools-core/opt_help.bash
-. "$root_dir"/share/wrtools-core/opt_verbose.bash
-. "$root_dir"/share/wrtools-core/fail.bash
-. "$root_dir"/share/wrtools-core/temp.bash
+wbl_load add_option
+wbl_load keep_temps_option
+wbl_load make_temp_dir
 
-#HELP:  --remote=$remote-name | -r $remote-name: point commits to URLs based on
-#HELP:                                           a remote repo
-unset remote
-opt_remote () {
-    (( $# == 1 ))|| fail_assert "$FUNCNAME expects 1 arg, a remote name"
-    [[ is-set != ${remote+is-set} ]] || fail "Option --remote can only be used once"
-    remote=$1
-}
+wbl_add_option \
+    --long-option=remote --short-option=r --variable=remote --has-arg \
+    --help='-r, --remote=$remote-name: Point commits to URLs based on a remote repo'
+wbl_add_option \
+    --long-option=all --short-option=a --variable=all \
+    --help='-a, --all: Show all commits & refs in the repository'
+wbl_add_option \
+    --long-option=decorate --short-option=d --variable=decorate \
+    --help='-d, --decorate: Decorate logs: show branches, tags, and references'
+wbl_add_option \
+    --long-option=open --short-option=o --variable=open \
+    --help='-o, --open: Open the HTML result file'
+wbl_add_option \
+    --long-option=date --variable=date --has-arg \
+    --help='--date=$date-flag: Set date format using git log --date option
+values: relative, local, default, iso, iso-strict, rfc, short, raw'
 
-#HELP:  --all | -a: show all commits & refs in the repository
-unset all
-opt_all () {
-    (( $# == 0 )) || fail_assert "$FUNCNAME expects 0 args (got $#)"
-    all=true
-}
-
-#HELP:  --decorate | -d: Decorate logs: show branches, tags, and references
-unset decorate
-opt_decorate () {
-    (( $# == 0 )) || fail_assert "$FUNCNAME expects 0 args (got $#)"
-    decorate=true
-}
-
-#HELP:  --open | -o: open the HTML result file
-unset open
-opt_open () {
-    (( $# == 0 ))|| fail_assert "$FUNCNAME expects 0 args (got $#)"
-    open=true
-}
-
-#HELP:  --date=$date-flag: set date format using git log --date option
-#HELP:      values: relative, local, default, iso, iso-strict, rfc, short, raw
-unset date
-opt_date () {
-    (( $# == 1 )) || fail_assert "$FUNCNAME expects 1 args (got $#)"
-    case $1 in
-        relative | local | default | iso | iso-strict | rfc | short | raw ) date=$1;;
-        * ) fail "Unknown value for --date ($1)";;
-    esac
-}
-
-OPTIND=1
-while getopts :adhkor:v-: OPTION
-do
-    case "$OPTION" in
-        a ) opt_all;;
-        d ) opt_decorate;;
-        h ) opt_help;;
-        k ) opt_keep_temps;;
-        o ) opt_open;;
-        r ) opt_remote "$OPTARG";;
-        v ) opt_verbose;;
-        - )
-            case "$OPTARG" in
-                all ) opt_all;;
-                all=* ) fail_arg_unexpected "$OPTARG";;
-                date ) fail_arg_missing "$OPTARG";;
-                date=* ) opt_date "${OPTARG#*=}";;
-                decorate ) opt_decorate;;
-                decorate=* ) fail_arg_unexpected "$OPTARG";;
-                help ) opt_help;;
-                help=* ) fail_arg_unexpected "$OPTARG";;
-                keep-temps ) opt_keep_temps;;
-                keep-temps=* ) fail_arg_unexpected "$OPTARG";;
-                open ) opt_open;;
-                open=* ) fail_arg_unexpected "$OPTARG";;
-                remote ) fail_arg_missing "$OPTARG";;
-                remote=* ) opt_remote "${OPTARG#*=}";;
-                verbose ) opt_verbose;;
-                verbose=* ) fail_arg_unexpected "$OPTARG";;
-                * ) fail_option_unknown "$OPTARG";;
-            esac;;
-        '?' ) fail_option_unknown "$OPTARG";;
-        : ) fail_arg_missing "$OPTARG";;
-        * ) fail "bad state OPTARG=\"$OPTARG\"";;
-    esac
-done
+wbl_handle_options "$@"
 shift $((OPTIND-1))
 
+if [[ ${date+is-set} ]]
+then case $date in
+         relative | local | default | iso | iso-strict | rfc | short | raw )
+	     true;;
+         * ) wbl_external_error "Unknown value for --date ($date)";;
+     esac
+fi
+
 if ! git rev-parse > /dev/null 2>&1
-then fail "Not in a git repository"
+then wbl_external_error "Not in a git repository"
 fi
    
 
@@ -112,20 +55,20 @@ if [[ is-set = ${date+is-set} ]]
 then git_log+=( --date="$date" )
 fi
 
-temp_make_dir git_graphviz
+wbl_make_temp_dir git_graphviz
 
 if [[ is-set = ${remote+is-set} ]]
 then true
 elif remote=$(git config --get-regexp '^remote.[^.]*.url$' | sed -e '1s/^remote\.\([^\.]*\).url .*$/\1/p;d')
 then true
 fi
-vecho "remote is ${remote-unset}"
+wbl_verbose_echo "remote is ${remote-unset}"
 
 unset remote_url
 if remote_url=$(git config --get "remote.$remote.url")
 then true
 fi
-vecho "remote_url is ${remote_url-unset}"
+wbl_verbose_echo "remote_url is ${remote_url-unset}"
 
 case ${remote_url-} in
     https://github.com/* )
