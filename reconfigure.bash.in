@@ -1,0 +1,39 @@
+#!@bash@
+
+set -o nounset -o errexit -o pipefail
+unset CDPATH
+cd "$(dirname "$0")"
+
+while (( $# > 0 ))
+do case $1 in
+     -h | --help )
+       cat << EOF
+reconfigure.bash: re-run configure, maintaining current settings.
+Options:
+  -h | --help: print this help
+  --clean: remove configure products
+EOF
+       exit 0
+       ;;
+     # delete all the build stuff and start off clean
+     --clean )
+       for file in @config_files@
+       do case $file in
+            reconfigure.bash ) true;;
+            * ) rm -f "$file";;
+          esac
+       done
+       exit 0
+       ;;
+     * )
+       echo "Error: bad arg $1" >&2
+       exit 1
+       ;;
+   esac
+   shift
+done
+
+PATH='@PATH@'
+export PATH
+
+'@srcdir@'/configure --prefix='@prefix@'

@@ -20,26 +20,23 @@ PACKAGE_TARNAME = @PACKAGE_TARNAME@
 # PROGRAMS
 # autoconf names
 MKDIR_P = @MKDIR_P@
-install_data_mode :=             ${shell printf '%o' $$(( ( $$(umask) ^ 0777 ) & 0666 ))}
-install_data_readonly_mode :=    ${shell printf '%o' $$(( ( $$(umask) ^ 0777 ) & 0444 ))}
-install_program_readonly_mode := ${shell printf '%o' $$(( ( $$(umask) ^ 0777 ) & 0555 ))}
 INSTALL = @INSTALL@
-INSTALL_DATA = ${INSTALL} -m ${install_data_mode}
-INSTALL_DATA_READONLY = ${INSTALL} -m ${install_data_readonly_mode}
-INSTALL_PROGRAM_READONLY = ${INSTALL} -m ${install_program_readonly_mode}
+INSTALL_PROGRAM = @INSTALL_PROGRAM@
+INSTALL_SCRIPT = @INSTALL_SCRIPT@
+INSTALL_DATA = @INSTALL_DATA@
 SED = @SED@
-# other names
-find = @find@
 
 config_files = @config_files@
 
-# Insert files list with: CONTROL-U OPTION-!
-# find src -type f | sort | sed -e 's/\(.*\)/  \${srcdir}\/\1 \\/'
+tmp_dir = ${builddir}/tmp
+all_dir = ${tmp_dir}/all
+
+# find src ! -name '*~' -type f | sort | sed -e 's/\(.*\)/  \${srcdir}\/\1 \\/'
 src_files = \
   ${srcdir}/src/bin/git-graphviz \
   ${srcdir}/src/bin/git-find \
 
-all_files = ${src_files:${srcdir}/src/%=${builddir}/build/%}
+all_files = ${src_files:${srcdir}/src/%=${all_dir}/%}
 install_files = ${src_files:${srcdir}/src/%=${prefix}/%}
 
 #############################################################################
@@ -58,8 +55,7 @@ uninstall:
 
 .PHONY: clean #   Clean build products
 clean:
-	${RM} ${all_files}
-	${RM} -r ${builddir}/build
+	${RM} -r ${tmp_dir}
 
 .PHONY: distclean #   Clean build & configure products
 distclean: clean
@@ -68,20 +64,20 @@ distclean: clean
 #############################################################################
 # all
 
-${builddir}/build/%: ${srcdir}/src/%
-	@ ${MKDIR_P} -- ${dir $@}
+${all_dir}/%: ${srcdir}/src/%
+	${MKDIR_P} -- ${dir $@}
 	${srcdir}/wobble-bash-library/bin/embed-modules -o $@ $<
 
 #############################################################################
 # install
 
-${prefix}/bin/%: ${builddir}/build/bin/%
-	@ ${MKDIR_P} -- ${dir $@}
-	${INSTALL_PROGRAM_READONLY} -- $< $@
+${prefix}/bin/%: ${all_dir}/bin/%
+	${MKDIR_P} -- ${dir $@}
+	${INSTALL_SCRIPT} -- $< $@
 
-${prefix}/%: ${builddir}/build/%
-	@ ${MKDIR_P} -- ${dir $@}
-	${INSTALL_DATA_READONLY} -- $< $@
+${prefix}/%: ${all_dir}/%
+	${MKDIR_P} -- ${dir $@}
+	${INSTALL_DATA} -- $< $@
 
 #############################################################################
 # make help: this must be the last target

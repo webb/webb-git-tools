@@ -1,7 +1,7 @@
-/autom4te.cache
 /Makefile
+/autom4te.cache
 /config.log
 /config.status
-/build
-/zip.mk
+/reconfigure.bash
 /stow.mk
+/tmp
