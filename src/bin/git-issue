@@ -6,8 +6,6 @@
 #HELP:COMMAND_NAME: Operations supporting working with github issues
 #HELP:Usage: COMMAND_NAME [options] $command $args...
 
-set -o nounset -o errexit -o pipefail
-
 wbl_load verbose_option
 wbl_load help_option
 wbl_load external_error
