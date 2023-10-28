@@ -33,6 +33,7 @@ all_dir = ${tmp_dir}/all
 
 # find src ! -name '*~' -type f | sort | sed -e 's/\(.*\)/  \${srcdir}\/\1 \\/'
 src_files = \
+  ${srcdir}/src/bin/git-catlog \
   ${srcdir}/src/bin/git-find \
   ${srcdir}/src/bin/git-graphviz \
   ${srcdir}/src/bin/git-issue \
