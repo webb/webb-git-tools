@@ -36,6 +36,14 @@ is_status_clean () {
 }
 
 exec 3>&1
+display_and_save_input () {
+  tee /dev/fd/3 \
+    | if pbcopy=$(type -p pbcopy)
+  then "$pbcopy"
+  else cat
+  fi
+}
+
 
 #HELP:Commands:
 wbl_verbose_echo "command is \"$1\""
@@ -138,19 +146,22 @@ case "$1" in
     issue_branch=$(git symbolic-ref --short HEAD) || wbl_external_error "Error identifying HEAD"
     issue_uri=$(git config --get "wrtools.issue.$issue_branch.issue-uri") \
       || wbl_external_error "No issue URI set for current branch $issue_branch"
-    printf '%s' "$issue_uri" \
-      | tee /dev/fd/3 \
-      | {
-      if pbcopy=$(type -p pbcopy)
-      then pbcopy
-      else cat
-      fi
-    }
+    printf '%s' "$issue_uri" | display_and_save_input
+    ;;
+  #HELP:  get-title: get the title of the current issue
+  get-title )
+    issue=$("$0" get-uri) \
+      || wbl_external_error "get-uri failed"
+    title=$(gh issue view --json title --jq .title "$issue") \
+      || wbl_external_error "\"gh issue\" failed to get title"
+    printf '%s' "$title" | display_and_save_input
     ;;
   * )
     wbl_external_error "unknown command \"$1\""
     ;;
 esac
+
+#HELP:Options:
 
 if ! git rev-parse > /dev/null 2>&1
 then wbl_external_error "Not in a git repository"
