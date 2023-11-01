@@ -35,6 +35,8 @@ is_status_clean () {
     [[ -z $status ]]
 }
 
+exec 3>&1
+
 #HELP:Commands:
 wbl_verbose_echo "command is \"$1\""
 case "$1" in
@@ -130,6 +132,20 @@ case "$1" in
   clean )
     git config -z --name-only --get-regexp '^wrtools.issue.' \
       | xargs -0 -n 1 git config --unset
+    ;;
+  #HELP:  get-uri: get the URL for the current issue
+  get-uri )
+    issue_branch=$(git symbolic-ref --short HEAD) || wbl_external_error "Error identifying HEAD"
+    issue_uri=$(git config --get "wrtools.issue.$issue_branch.issue-uri") \
+      || wbl_external_error "No issue URI set for current branch $issue_branch"
+    printf '%s' "$issue_uri" \
+      | tee /dev/fd/3 \
+      | {
+      if pbcopy=$(type -p pbcopy)
+      then pbcopy
+      else cat
+      fi
+    }
     ;;
   * )
     wbl_external_error "unknown command \"$1\""
