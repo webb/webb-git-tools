@@ -67,7 +67,11 @@ case "$1" in
     then wbl_external_error "issue branch $issue_branch already exists"
     fi
     git checkout -b "$issue_branch"
-    git commit --allow-empty -m "Issue $uri."
+    commit_message="Issue $uri"
+    if title=$(gh issue view --json title --jq .title "$uri")
+    then commit_message+=": $title"
+    fi
+    git commit --allow-empty -m "$commit_message"
     git config "wrtools.issue.$issue_branch.parent-branch" "$parent_branch"
     git config "wrtools.issue.$issue_branch.issue-uri" "$uri"
     exit 0
