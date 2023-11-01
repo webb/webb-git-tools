@@ -90,7 +90,7 @@ case "$1" in
     issue_uri=$(git config --get "wrtools.issue.$issue_branch.issue-uri") \
       || wbl_external_error "No issue URI set for current branch $issue_branch"
     git checkout "$parent_branch"
-    git merge --no-ff -m "Merge topic branch for issue $issue_uri into parent branch $parent_branch. Closes $issue_uri." "$issue_branch"
+    git merge --no-ff -m "Merge topic branch for issue $issue_uri into parent branch $parent_branch. Close $issue_uri." "$issue_branch"
     git branch -d "$issue_branch"
     git config --unset "wrtools.issue.$issue_branch.parent-branch"
     git config --unset "wrtools.issue.$issue_branch.issue-uri"
@@ -105,7 +105,7 @@ case "$1" in
       || wbl_external_error "No parent branch set for current branch $issue_branch"
     issue_uri=$(git config --get "wrtools.issue.$issue_branch.issue-uri") \
       || wbl_external_error "No issue URI set for current branch $issue_branch"
-    git commit --allow-empty -m "Closes $issue_uri."
+    git commit --allow-empty -m "Close $issue_uri."
     git rebase -i --keep-empty "$parent_branch"
     git checkout "$parent_branch"
     git merge --ff-only "$issue_branch"
