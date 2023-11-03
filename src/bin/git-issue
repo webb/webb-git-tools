@@ -69,7 +69,7 @@ case "$1" in
     git checkout -b "$issue_branch"
     commit_message="Issue $uri"
     if title=$(gh issue view --json title --jq .title "$uri")
-    then commit_message+=": $title"
+    then commit_message+=$'\n'"$title"
     fi
     git commit --allow-empty -m "$commit_message"
     git config "wrtools.issue.$issue_branch.parent-branch" "$parent_branch"
