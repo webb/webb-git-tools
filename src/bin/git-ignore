@@ -1,62 +1,48 @@
 #!/usr/bin/env bash
 
-set -o nounset -o errexit -o pipefail
-
-#HELP:COMMAND_NAME: Add expressions to a GIT excludes/ignore file
+#HELP:COMMAND_NAME: Add expressions to a git excludes/ignore file
 #HELP:Usage: COMMAND_NAME $path ...
 
-root_dir=$(dirname "$0")/..
-. "$root_dir"/share/wrtools-core/opt_help.bash
-. "$root_dir"/share/wrtools-core/fail.bash
+wbl_load handle_options
+wbl_load help_option
+wbl_load external_error
+wbl_load internal_error
+wbl_load add_option
 
-#HELP:Options:
-#HELP:  --help | -h: Print this help
-
-#HELP:  --scope=$scope | -s $scope: Set the level at which the exclusion will be
-#HELP:      applied. Scopes include:
-#HELP:          global: set at the user level (via property core.excludefile)
-#HELP:          root: set at current git repo's root .gitignore file
-#HELP:          local: set at current git repo's .git/info/excludes file
-#HELP:          dir: set at current folder's .gitignore file
-#HELP:     Scopes can be abbreviated to their first letter (e.g., -sl).
-#HELP:     If the current working directory is within a git repo, the default
-#HELP:     scope is "root", otherwise it's "global".
 unset scope
-opt_scope () {
-    (( $# == 1 )) || fail_assert "opt_scope needs 1 argument"
-    case $1 in
+wbl_add_option \
+  --long-option=scope \
+  --short-option=s \
+  --variable=scope_option \
+  --has-arg \
+  --help="-s, --scope=\$scope: Set the level at which the exclusion takes effect.
+Scopes include:
+        global: set at the user level (via property core.excludefile)
+        root: set at current git repo's root .gitignore file
+        local: set at current git repo's .git/info/excludes file
+        dir: set at current folder's .gitignore file
+    Scopes can be abbreviated to their first letter (e.g., -sl).
+    If the current working directory is within a git repo, the default
+    scope is \"root\", otherwise it's \"global\"."
+    
+wbl_handle_options "$@"
+shift $((OPTIND-1))
+
+if [[ ! ${scope_option+is-set} ]]
+then wbl_external_error "option --scope is required"
+else case $scope_option in
         global | g ) scope=global;;
         root | r ) scope=root;;
         local | l ) scope=local;;
         dir | d ) scope=dir;;
-        * ) fail "Unknown scope \"$1\". Must be global, root, local, or dir."
-    esac
-}
-    
-OPTIND=1
-while getopts :hs:-: option
-do case "$option" in
-       h ) opt_help;;
-       s ) opt_scope "$OPTARG";;
-       - ) case "$OPTARG" in
-               help ) opt_help;;
-               scope=* ) opt_scope "${OPTARG#*=}";;
-               scope ) fail "Argument required for long option \"$OPTARG\"";;
-               help=* ) fail "Long option \"${OPTARG%%=*}\" has unexpected argument";;
-               * ) fail "Unknown long option \"${OPTARG%%=*}\"";;
-            esac;;
-        '?' ) fail "Unknown short option \"$OPTARG\"";;
-        : ) fail "Short option \"$OPTARG\" missing argument";;
-        * ) fail_assert "Bad state in getopts (OPTARG=\"$OPTARG\")";;
-   esac
-done
-shift $((OPTIND-1))
+        * ) wbl_external_error "Unknown scope \"$scope_option\". Must be global, root, local, or dir.";;
+     esac
+fi
 
 if git rev-parse 2>/dev/null
 then in_git_repo=true
 else in_git_repo=false
 fi
-
 
 if [[ $in_git_repo = true ]]
 then in_git_dir=$(git rev-parse --is-inside-git-dir)
@@ -76,31 +62,31 @@ unset excludesfile
 case $scope in
     global )
         if ! excludesfile=$(git config --path --get core.excludesfile 2>/dev/null)
-        then fail "Global scope requested, but property core.excludesfile is unset"
+        then wbl_external_error "Global scope requested, but property core.excludesfile is unset"
         fi
         ;;
     root )
         if [[ $in_git_repo = false ]]
-        then fail "Root scope requested, but context is not a git repository"
+        then wbl_external_error "Root scope requested, but context is not a git repository"
         fi
         excludesfile=$(git rev-parse --show-toplevel)/.gitignore
         ;;
     local )
         if [[ $in_git_repo = false ]]
-        then fail "Local scope requested, but context is not a git repository"
+        then wbl_external_error "Local scope requested, but context is not a git repository"
         fi
         excludesfile=$(git rev-parse --absolute-git-dir)/info/exclude
         ;;
     dir )
         if [[ $in_git_repo = false ]]
-        then fail "Dir scope requested, but context is not a git repository"
+        then wbl_external_error "Dir scope requested, but context is not a git repository"
         fi
         if [[ $in_git_dir = true ]]
-        then fail "Dir scope requested, but context is in a .git folder"
+        then wbl_external_error "Dir scope requested, but context is in a .git folder"
         fi
         excludesfile=$PWD/.gitignore
         ;;
-    * ) fail_assert "bad scope \"$scope\""
+    * ) wbl_internal_error "bad scope \"$scope\""
 esac
 
 git_root_dir=$(git rev-parse --show-toplevel)
@@ -111,7 +97,7 @@ do case $scope in
        root | local ) line=/$(realpath --relative-to="$git_root_dir" -- "$relative_path") ;;
        global ) line=$relative_path;;
        dir ) line=/$(realpath --relative-to="$(dirname "${excludesfile}")" -- "$relative_path") ;;
-       * ) fail_assert "unexpected \$scope $scope";;
+       * ) wbl_internal_error "unexpected \$scope $scope";;
    esac
    printf 'Add "%s" to %s?\n' "$line" "$excludesfile" >&2
    PS3='? '

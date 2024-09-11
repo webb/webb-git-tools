@@ -1,0 +1,42 @@
+#!/usr/bin/env bash
+
+#HELP:WBL_COMMAND_NAME: Check if a repository is clean
+#HELP:Usage: WBL_COMMAND_NAME $options
+#HELP:Options:
+
+wbl_load add_option
+wbl_load help_option
+wbl_load run
+wbl_load verbose_option
+
+main_branch=main
+wbl_add_option --long-option=main-branch --has-arg --variable=main_branch --no-unset \
+               --help="--main-branch=\${branch name}: Set main git branch (default \"$main_branch\")"
+
+wbl_handle_options "$@"
+shift $((OPTIND-1))
+
+(( $# == 0 )) || wbl_external_error "Unexpected positional args: $*"
+
+repo_dir=$(wbl_run git rev-parse --show-toplevel) || exit 1
+
+status=$(wbl_run git -C "$repo_dir" status --porcelain=v2) || exit 1
+[[ -z $status ]] || wbl_external_error "Repo status is not empty"
+
+main_commit=$(wbl_run git -C "$repo_dir" rev-parse "refs/heads/${main_branch}") \
+  || wbl_external_error "Repo does not have branch ${main_branch}"
+
+head_branch=$(wbl_run git -C "$repo_dir" rev-parse --abbrev-ref HEAD) \
+  || wbl_external_error "Can't get name of branch HEAD"
+
+[[ $main_branch = $head_branch ]] || wbl_external_error "head branch ($head_branch) is not main branch ($main_branch)"
+
+upstream_branch=$(wbl_run git -C "$repo_dir" rev-parse --abbrev-ref "${main_branch}"@{upstream}) \
+  || wbl_external_error "Main branch ${main_branch} has no upstream branch"
+
+wbl_run git -C "$repo_dir" fetch --all || wbl_external_error "Can't fetch all remotes"
+
+upstream_commit=$(wbl_run git -C "$repo_dir" rev-parse "$upstream_branch") \
+  || wbl_external_error "Can't get commit of upstream branch (${upstream_branch})"
+
+[[ $main_commit = $upstream_commit ]] || wbl_external_error "Main commit doesn't match remote commit ($main_commit vs $upstream_commit)"

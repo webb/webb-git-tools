@@ -36,7 +36,10 @@ src_files = \
   ${srcdir}/src/bin/git-catlog \
   ${srcdir}/src/bin/git-find \
   ${srcdir}/src/bin/git-graphviz \
+  ${srcdir}/src/bin/git-ignore \
+  ${srcdir}/src/bin/git-is-repo-clean \
   ${srcdir}/src/bin/git-issue \
+
 
 all_files = ${src_files:${srcdir}/src/%=${all_dir}/%}
 install_files = ${src_files:${srcdir}/src/%=${prefix}/%}
