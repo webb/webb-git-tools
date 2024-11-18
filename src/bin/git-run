@@ -1,0 +1,19 @@
+#!/usr/bin/env bash
+
+#HELP:WBL_COMMAND_NAME: Run a non-git command within a git repo
+#HELP:Usage: WBL_COMMAND_NAME $options -- ${command...}
+#HELP:  e.g., git -C ${repo-dir} run find . -type d -maxdepth 1
+#HELP:Options:
+
+wbl_load verbose_option
+wbl_load help_option
+wbl_load dry_run_option
+wbl_load external_error
+wbl_load run
+
+wbl_handle_options "$@"
+shift $((OPTIND-1))
+
+(( $# > 0 )) || wbl_external_error "args required: command to run..."
+
+wbl_run --verbose --unless-dry-run "$@"

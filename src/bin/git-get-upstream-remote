@@ -1,0 +1,28 @@
+#!/usr/bin/env bash
+
+#HELP:WBL_COMMAND_NAME: Get the name of the remote repo for the upstream branch
+#HELP:Usage: WBL_COMMAND_NAME
+#HELP:Options:
+
+wbl_load verbose_option
+wbl_load help_option
+wbl_load external_error
+wbl_load run
+wbl_load verbose_echo
+
+wbl_handle_options "$@"
+shift $((OPTIND-1))
+
+(( $# == 0 )) || wbl_external_error "no args expected"
+
+upstream=$(wbl_run git rev-parse --abbrev-ref --symbolic-full-name @{u}) \
+  || wbl_external_error "No upstream repo for repo $PWD"
+wbl_verbose_echo "upstream is $upstream"
+
+re='^([^ /]+)/([^ /]+)$'
+[[ $upstream =~ $re ]] \
+  || wbl_external_error "Unexpected remote format: $upstream"
+
+printf '%s' "${BASH_REMATCH[1]}"
+
+

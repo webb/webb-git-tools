@@ -1,0 +1,62 @@
+#!/usr/bin/env bash
+
+#HELP:WBL_COMMAND_NAME: Recursively tag a repo and submodules
+#HELP#:Usage: WBL_COMMAND_NAME $options -- $git-log-options
+#HELP#:  e.g., WBL_COMMAND_NAME -- -n 2 : capture the last 2 commit messages
+#HELP:Options:
+
+wbl_load verbose_option
+wbl_load help_option
+wbl_load external_error
+wbl_load add_option
+wbl_load list_contains
+
+# -d, --date
+wbl_add_option --long-option=date --short-option=d --variable=date \
+               --help='-d, --date: Set tag to be from the date'
+# -t, --tag=$tag
+wbl_add_option --long-option=tag --short-option=t --has-arg --variable=tag \
+               --help='-t, --tag=$tag: Set tag'
+# --delete=$tag
+wbl_add_option --long-option=delete --has-arg --has-arg --variable=delete \
+               --help='--delete=$tag: Delete tag'
+
+wbl_handle_options "$@"
+shift $((OPTIND-1))
+
+tags_count=$(( ${date+1}+0 + ${tag+1}+0 + ${delete+1}+0 ))
+(( $tags_count == 1 )) || wbl_external_error "Exactly one of (--delete, --date, --tag) is required (got $tags_count)"
+
+if [[ ${date+is-set} ]]; then
+  tag=$(date +%Y-%m-%d-%H%M)
+fi
+
+subdirs=()
+exec 3< <(git submodule foreach --recursive --quiet pwd)
+while IFS= read -r -u3 -d $'\n' line; do
+  subdirs+=("$line")
+done
+
+run () {
+  printf 'running %s\n' "$*"
+  "$@"
+}
+
+for dir in . ${subdirs[1]+"${subdirs[@]}"}; do
+  upstream=$(git -C "$dir" rev-parse --abbrev-ref --symbolic-full-name @{u}) \
+    || wbl_external_error "No upstream repo for repo $dir"
+done
+
+for dir in . ${subdirs[1]+"${subdirs[@]}"}; do
+  upstream=$(git -C "$dir" rev-parse --abbrev-ref --symbolic-full-name @{u}) \
+    || wbl_external_error "No upstream repo for repo $dir"
+  upstream_remote=${upstream%/*}
+
+  if [[ ${tag+is-set} ]]; then
+    run git -C "$dir" tag --force "$tag"
+    run git -C "$dir" push --force "$upstream_remote" "$tag"
+  elif [[ ${delete+is-set} ]]; then
+    run git -C "$dir" tag --delete "$tag"
+    run git -C "$dir" push "$upstream_remote" :"$tag"
+  fi  
+done

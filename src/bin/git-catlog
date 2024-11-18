@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 
-#HELP:COMMAND_NAME: Show & capture a bunch of commit logs, old to new
-#HELP:Usage: COMMAND_NAME $options -- $git-log-options
-#HELP:  e.g., COMMAND_NAME -- -n 2 : capture the last 2 commit messages
+#HELP:WBL_COMMAND_NAME: Show & capture a bunch of commit logs, old to new
+#HELP:Usage: WBL_COMMAND_NAME $options -- $git-log-options
+#HELP:  e.g., WBL_COMMAND_NAME -- -n 2 : capture the last 2 commit messages
 #HELP:Options:
 
 wbl_load verbose_option

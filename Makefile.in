@@ -25,24 +25,23 @@ INSTALL_PROGRAM = @INSTALL_PROGRAM@
 INSTALL_SCRIPT = @INSTALL_SCRIPT@
 INSTALL_DATA = @INSTALL_DATA@
 SED = @SED@
+# custom names
+bash=@bash@
 
 config_files = @config_files@
 
 tmp_dir = ${builddir}/tmp
 all_dir = ${tmp_dir}/all
 
-# find src ! -name '*~' -type f | sort | sed -e 's/\(.*\)/  \${srcdir}\/\1 \\/'
-src_files = \
-  ${srcdir}/src/bin/git-catlog \
-  ${srcdir}/src/bin/git-find \
-  ${srcdir}/src/bin/git-graphviz \
-  ${srcdir}/src/bin/git-ignore \
-  ${srcdir}/src/bin/git-is-repo-clean \
-  ${srcdir}/src/bin/git-issue \
+commands = ${patsubst src/bin/%,%, \
+             ${filter-out %~, \
+               ${wildcard src/bin/*}}}
 
+all_files = \
+  ${commands:%=${all_dir}/bin/%} \
+  ${commands:%=${all_dir}/man/cat1/%.1} \
 
-all_files = ${src_files:${srcdir}/src/%=${all_dir}/%}
-install_files = ${src_files:${srcdir}/src/%=${prefix}/%}
+install_files = ${all_files:${all_dir}/%=${prefix}/%}
 
 #############################################################################
 #HELP:Default target is "all". Targets include:
@@ -69,9 +68,14 @@ distclean: clean
 #############################################################################
 # all
 
-${all_dir}/%: ${srcdir}/src/%
+${all_dir}/bin/%: ${srcdir}/src/bin/%
 	${MKDIR_P} -- ${dir $@}
 	${srcdir}/wobble-bash-library/bin/embed-modules -o $@ $<
+
+# man files
+${all_dir}/man/cat1/%.1: ${all_dir}/bin/%
+	${MKDIR_P} ${dir $@}
+	${bash} $< --help > $@ || { ${RM} $@ && echo $< --help failed >&2 && false; }
 
 #############################################################################
 # install
@@ -83,6 +87,17 @@ ${prefix}/bin/%: ${all_dir}/bin/%
 ${prefix}/%: ${all_dir}/%
 	${MKDIR_P} -- ${dir $@}
 	${INSTALL_DATA} -- $< $@
+
+#############################################################################
+# helpers
+
+list-commands:
+	echo 'commands = \' \
+	&& cd ${srcdir}/src/bin \
+	&& find . -type f ! -name '*~' \
+	   | sort \
+	   | sed -e 's|^./\(.*\)|  \1 \\|' \
+	&& echo ''
 
 #############################################################################
 # make help: this must be the last target

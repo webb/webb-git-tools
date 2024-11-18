@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 
-#HELP:COMMAND_NAME: Add expressions to a git excludes/ignore file
-#HELP:Usage: COMMAND_NAME $path ...
+#HELP:WBL_COMMAND_NAME: Add expressions to a git excludes/ignore file
+#HELP:Usage: WBL_COMMAND_NAME $path ...
 
 wbl_load handle_options
 wbl_load help_option

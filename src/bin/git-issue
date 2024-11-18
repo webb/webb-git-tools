@@ -3,8 +3,8 @@
 # TODO: add a "force" argument to do issue stuff when there's a dirty working directory.
 # TODO: fetch issue subject from github
 
-#HELP:COMMAND_NAME: Operations supporting working with github issues
-#HELP:Usage: COMMAND_NAME [options] $command $args...
+#HELP:WBL_COMMAND_NAME: Operations supporting working with github issues
+#HELP:Usage: WBL_COMMAND_NAME [options] $command $args...
 
 wbl_load verbose_option
 wbl_load help_option

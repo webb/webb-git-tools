@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 
-#HELP:CORE_COMMAND_NAME: Build and display a git repository graph using GraphViz
-#HELP:Usage: CORE_COMMAND_NAME [options]* -- rev-list ...
+#HELP:WBL_COMMAND_NAME: Build and display a git repository graph using GraphViz
+#HELP:Usage: WBL_COMMAND_NAME [options]* -- rev-list ...
 #HELP:Options:
 
 export LC_ALL=C

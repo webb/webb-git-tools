@@ -1,0 +1,53 @@
+#!/usr/bin/env bash
+
+#HELP:WBL_COMMAND_NAME: Recursively tag a repo and submodules
+#HELP:Usage: WBL_COMMAND_NAME $options -- ${git command ...}
+#HELP:Options:
+
+wbl_load verbose_option
+wbl_load help_option
+wbl_load dry_run_option
+wbl_load external_error
+wbl_load run
+wbl_load verbose_echo
+wbl_load add_option
+
+wbl_add_option --long-option=depth-first --short-option=d --variable=depth_first \
+               --help='-d, --depth-first: Run command in submodules before root repo'
+
+wbl_handle_options "$@"
+shift $((OPTIND-1))
+
+command=("$@")
+shift $#
+
+wbl_verbose_echo "command is: ${command[*]}"
+
+this_repo=$(git rev-parse --show-toplevel) \
+  || wbl_external_error "can't get top level dir of repo in $PWD"
+
+subdirs=()
+exec 3< <(git submodule foreach --recursive --quiet pwd)
+while IFS= read -r -u3 -d $'\n' line; do
+  subdirs+=("$line")
+done
+
+if [[ ${depth_first-false} = true ]]; then
+  repos=( ${subdirs[0]+"${subdirs[@]}"} "$this_repo" )
+else
+  repos=( "$this_repo" ${subdirs[0]+"${subdirs[@]}"} )
+fi
+
+status=0
+
+for repo in "${repos[@]}"
+do
+  wbl_verbose_echo "in repo dir $repo"
+  if wbl_run --verbose --unless-dry-run git -C "$repo" "${command[@]}"
+  then true
+  else status=$?
+       wbl_verbose_echo "run failed with status $status"
+  fi
+done
+
+exit $status

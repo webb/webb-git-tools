@@ -1,0 +1,40 @@
+#!/usr/bin/env bash
+
+#HELP:WBL_COMMAND_NAME: Run multiple commands
+#HELP:Usage: WBL_COMMAND_NAME ${command 1} \; {command 2} \; ${command 3}
+#HELP:Options:
+
+wbl_load verbose_option
+wbl_load help_option
+wbl_load dry_run_option
+wbl_load external_error
+wbl_load run
+
+wbl_handle_options "$@"
+shift $((OPTIND-1))
+
+(( $# > 0 )) || wbl_external_error "args required: commands to run..."
+
+command=()
+run_command () {
+  (( ${#command[@]} > 0 )) || wbl_external_error "can't run empty command"
+  wbl_run --verbose --unless-dry-run -- git "${command[@]}"
+  command=()
+}
+
+while (( $# > 0 )); do
+  case $1 in
+    ';' )
+      run_command
+      shift
+      ;;
+    * )
+      command+=("$1")
+      shift
+      ;;
+  esac
+done
+
+if (( ${#command[@]} > 0 )); then
+  run_command
+fi
