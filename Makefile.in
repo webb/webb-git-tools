@@ -34,9 +34,9 @@ tmp_dir = ${builddir}/tmp
 all_dir = ${tmp_dir}/all
 
 commands = \
-  ${patsubst ${srcdir}/src/bin/%,%, \
-    ${filter-out %~, \
-      ${wildcard ${srcdir}/src/bin/*}}}
+  ${filter-out %~, \
+   ${patsubst ${srcdir}/src/bin/%,%/bin, \
+    ${wildcard ${srcdir}/src/bin/*}}}
 
 all_files = \
   ${commands:%=${all_dir}/bin/%} \
