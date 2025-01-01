@@ -1,7 +1,7 @@
 # Process this file with autoconf to produce a configure script.
 
 AC_PREREQ([2.69])
-AC_INIT([webb-git-tools],[0],[https://github.com/webb/wrtools-git/issues],[webb-git-tools],[https://github.com/webb/wrtools-git/])
+AC_INIT([webb-git-tools],[0],[https://github.com/webb/webb-git-tools.git],[webb-git-tools],[https://github.com/webb/wrtools-git/])
 
 if test "x$prefix" = "xNONE"
 then AC_MSG_ERROR([\$prefix is unset. Set with --prefix=\${install root directory}])
