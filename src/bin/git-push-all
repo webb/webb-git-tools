@@ -1,0 +1,88 @@
+#!/usr/bin/env bash
+
+#HELP:WBL_COMMAND_NAME: Easily push to a list of remote repositories
+#HELP:Usage: git push-all --set $remote1 $remote2 ...
+#HELP:       git push-all (-f)? ...
+#HELP:
+#HELP:Example:
+#HELP:  $ git push-all --set local grover github
+#HELP:  $ git push-all --get
+#HELP:      -> yields "local,grover,github"
+#HELP:  $ git push-all main
+#HELP:      -> git push local main
+#HELP:      -> git push grover main
+#HELP:      -> git push github main
+#HELP:  $ git push-all -f issue-123
+#HELP:      -> git push -f local main
+#HELP:      -> git push -f grover main
+#HELP:      -> git push -f github main
+#HELP:
+#HELP:Options:
+
+wbl_load add_option
+wbl_load command_name
+wbl_load help_option
+wbl_load verbose_option
+wbl_load verbose_run
+
+wbl_add_option --long-option=set --variable=set_remotes --has-arg \
+               --help='--set=remote1,remote2...: set push remotes'
+
+wbl_add_option --long-option=get --variable=get_remotes \
+               --help='--get: list push remotes'
+
+wbl_add_option --long-option=clean --variable=clean_remotes \
+               --help='--clean: remove push remotes from git config'
+
+wbl_add_option --long-option=force --short-option=f --variable=force \
+               --help='--force: use push -f'
+
+wbl_handle_options "$@"
+shift $((OPTIND-1))
+
+if ! git rev-parse --is-inside-work-tree > /dev/null; then
+  wbl_external_error "Must be run in a git repo"
+fi
+
+config_section=${wbl_command_name}
+config_key=${config_section}.remotes
+
+if [[ ${get_remotes-false} = true ]]; then
+  git config --get-all "$config_key" | cat
+  exit 0
+fi
+
+if [[ ${clean_remotes-false} = true ]]; then
+  git config --unset-all "$config_key" || true
+  git config --remove-section "$config_section" || true
+  exit 0
+fi
+
+if [[ ${set_remotes+is-set} ]]; then
+  git config "$config_key" "$set_remotes"
+fi
+
+remotes=()
+while IFS=$',\n' read -r -a remote_array; do
+  if (( ${#remote_array[@]} > 0 )); then
+    remotes+=( "${remote_array[@]}" )
+  fi
+done < <(git config --get-all "$config_key")
+
+(( ${#remotes[@]} > 0 )) || wbl_external_error "${config_key} is empty"
+
+for remote in "${remotes[@]}"; do
+  command=( git push )
+  if [[ ${force-false} = true ]]; then
+    command+=( --force )
+  fi
+  command+=( $remote )
+  if (( $# > 0 )); then
+    command+=( "$@" )
+  else
+    branch=$(git rev-parse --abbrev-ref HEAD) \
+      || wbl_external_error "Can't name for get repo head"
+    command+=( "$branch" )
+  fi
+  wbl_verbose_run "${command[@]}"
+done

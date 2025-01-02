@@ -35,7 +35,7 @@ all_dir = ${tmp_dir}/all
 
 commands = \
   ${filter-out %~, \
-   ${patsubst ${srcdir}/src/bin/%,%/bin, \
+   ${patsubst ${srcdir}/src/bin/%,%, \
     ${wildcard ${srcdir}/src/bin/*}}}
 
 all_files = \
