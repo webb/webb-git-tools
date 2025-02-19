@@ -1,0 +1,35 @@
+#!/usr/bin/env bash
+
+set -o nounset -o errexit -o pipefail
+unset CDPATH
+
+command_name=$(basename "$0")
+fail () {
+  printf "%s: Error: %s\n" "$command_name" "$@" >&2
+  exit 1
+}
+
+print_help () {
+  cat << EOF
+${command_name}: cat a file in the git repo
+Usage: ${command_name} \${filename}
+Options:
+  -h, --help: Print this help
+EOF
+}
+
+while (( $# > 0 )); do
+  case $1 in
+    -h* | --help ) print_help; exit 0;;
+
+    -- ) shift; break;;
+    -* ) fail "Bad option $1";;
+    * ) break;;
+  esac
+done
+
+(( $# == 1 )) || fail "Need 1 arg (got $#)"
+
+file=$(realpath --relative-to=$(git rev-parse --show-toplevel) "$1")
+
+git show "HEAD:${file}" | cat
