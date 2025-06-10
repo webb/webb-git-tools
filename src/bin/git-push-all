@@ -1,11 +1,11 @@
 #!/usr/bin/env bash
 
 #HELP:WBL_COMMAND_NAME: Easily push to a list of remote repositories
-#HELP:Usage: git push-all --set $remote1 $remote2 ...
+#HELP:Usage: git push-all --set=$remote1,$remote2,...
 #HELP:       git push-all (-f)? ...
 #HELP:
 #HELP:Example:
-#HELP:  $ git push-all --set local grover github
+#HELP:  $ git push-all --set=local,grover,github
 #HELP:  $ git push-all --get
 #HELP:      -> yields "local,grover,github"
 #HELP:  $ git push-all main
